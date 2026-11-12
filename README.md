@@ -61,4 +61,4 @@ Data item format: `[id, name, level, source, upgrades]`; source `0` base, `1` st
 Written for browsers released since spring 2021: Safari and iOS 14.5+, Chrome and Edge 84+, Firefox 83+, Samsung Internet 14+. The JavaScript is ES2017 syntax in ES modules. On older browsers the layout loses its spacing (flex `gap`) and some background effects.
 
 ## Data source
-Weapon names, levels, star caps and drop tables come from [edf-calc](https://github.com/zeddidragon/edf-calc) by Tony Sæle (zeddidragon), its sole contributor. That repository has no license file, so ask the author before publishing this data, and keep the credit on the HQ page.
+Weapon names, levels, star caps and drop tables come from [edf-calc](https://github.com/zeddidragon/edf-calc) by Tony Sæle (zeddidragon).
