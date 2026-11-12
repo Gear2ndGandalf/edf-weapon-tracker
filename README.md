@@ -12,10 +12,10 @@ Track weapon and vehicle unlocks for **Earth Defense Force 4.1, 5 and 6**, per c
 | `edf5.html`, `edf6.html` | EDF 5 / EDF 6 – owned checklist plus star upgrades |
 
 ## Deploying on GitHub Pages
-1. Create a new repository (for example `EDF-Tracker`) and upload everything in this folder to its root, including the empty `.nojekyll` file.
+1. Create a new repository (for example `edf-weapon-tracker`) and upload everything in this folder to its root, including the empty `.nojekyll` file.
    GitHub Pages needs a **public** repository on the Free plan; a private repository needs GitHub Pro. The published site is public either way.
 2. Settings → Pages → Source: *Deploy from a branch*, branch `main`, folder `/ (root)`.
-3. Open `https://<user>.github.io/EDF-Tracker/`.
+3. Open `https://<user>.github.io/edf-weapon-tracker/` (this copy: <https://gear2ndgandalf.github.io/edf-weapon-tracker/>).
 
 Because it lives on the same `<user>.github.io` domain as the old EDF-4.1-PWA, the EDF 4.1 page and HQ offer to import the old checklist's progress automatically. Old export files (`version: 1`) can also be imported from HQ.
 
