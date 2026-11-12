@@ -62,7 +62,10 @@ function offerLegacy() {
   if (store.legacyDismissed()) return;
   const found = store.findLegacyOnDevice();
   if (!found) return;
-  notice('Your old EDF 4.1 checklist on this device has ' + found.count + ' weapons checked. Import them into EDF 4.1?', [
+  // Asked again after v1.4.1 fixed the import (see legacyAskedBefore in store.js). Importing only adds weapons.
+  const again = store.legacyAskedBefore && store.legacyAskedBefore();
+  notice('Your old EDF 4.1 checklist on this device has ' + found.count + ' weapons checked. ' +
+    (again ? 'Earlier versions missed most of them when importing. Import them all into EDF 4.1 now?' : 'Import them into EDF 4.1?'), [
     {
       label: 'Import', primary: true,
       run: async () => {

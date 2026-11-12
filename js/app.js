@@ -550,7 +550,10 @@ function checkLegacy() {
   const found = store.findLegacyOnDevice();
   if (!found) return;
   const b = $('#banner');
-  b.innerHTML = '<p>Your old EDF 4.1 checklist on this device has ' + found.count + ' weapons checked. Import them here?</p>' +
+  // Asked again after v1.4.1 fixed the import (see legacyAskedBefore in store.js). Importing only adds weapons.
+  const again = store.legacyAskedBefore && store.legacyAskedBefore();
+  b.innerHTML = '<p>Your old EDF 4.1 checklist on this device has ' + found.count + ' weapons checked. ' +
+    (again ? 'Earlier versions missed most of them when importing. Import them all now?' : 'Import them here?') + '</p>' +
     '<button type="button" class="btn btn--accent" data-act="legacy-import">Import</button>' +
     '<button type="button" class="btn btn--ghost" data-act="legacy-dismiss">Not now</button>';
   b.hidden = false;

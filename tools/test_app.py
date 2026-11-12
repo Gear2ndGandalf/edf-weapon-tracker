@@ -29,6 +29,15 @@ if os.environ.get("EDF_QUICK"):  # faster run while developing: four representat
     SIZES = [(320, 568), (390, 844), (844, 390), (1280, 800)]
 fails: list[str] = []
 SERVER = None
+# The old EDF 4.1 checklist (EDF-4.1-PWA): its storage keys, category ids and the number of
+# weapons in each category, copied from that site's Ranger.js, Wingdiver.js, AirRaider.js and
+# Fencer.js. A save is { categoryId: [position, ...] }. data/edf41-legacy.json must match this.
+OLD_CHECKLIST = {
+    "rangerSave": {"assault-rifles": 30, "shotguns": 24, "sniper-rifles": 26, "rocket-launchers": 21, "missile-launchers": 18, "grenades": 40, "special-weapons": 34},
+    "wingdiverSave": {"short-range": 31, "mid-range-lasers": 19, "mid-range-electro": 20, "particle-cannons": 22, "sniper-weapons": 23, "ranged-attacks": 32, "homing-weapons": 18, "special-weapons": 14},
+    "airraiderSave": {"guidance": 11, "calling-support": 50, "support-equip": 32, "limpet-guns": 31, "stationary": 34, "special-weapons": 24, "tanks": 24, "ground-vehicles": 23, "helicopters": 15, "power-suits": 33},
+    "fencerSave": {"cc-strikers": 24, "cc-piercers": 26, "shields": 23, "automatic-artillery": 32, "artillery": 35, "missile-launchers": 23},
+}
 # Moves the HQ text-size slider the way a drag does: set the value, then fire "input".
 SET_TEXT = "(v) => { const r = document.querySelector('#textRange'); r.value = String(v); r.dispatchEvent(new Event('input', { bubbles: true })); }"
 
@@ -324,7 +333,7 @@ async def run(browser) -> None:
     await p2.wait_for_timeout(400)
     check("2/1564" in await p2.locator('[data-count="edf6"]').inner_text(), "import restores progress in a fresh browser")
     tmp = Path(tempfile.mkdtemp())
-    (tmp / "legacy.json").write_text(json.dumps({"version": 1, "data": {"rangerSave": {"assaultRifles": [0, 1, 2], "specialWeapons": [0]}, "fencerSave": {"missileLaunchers": [0, 1]}}}), encoding="utf-8")
+    (tmp / "legacy.json").write_text(json.dumps({"version": 1, "data": {"rangerSave": {"assault-rifles": [0, 1, 2], "special-weapons": [0]}, "fencerSave": {"missile-launchers": [0, 1]}}}), encoding="utf-8")
     await p2.set_input_files("#importfile", str(tmp / "legacy.json"))
     await p2.wait_for_timeout(400)
     check("Imported 10" in await p2.locator("#notice").inner_text(), "old EDF 4.1 export imports (3 rifles + 5 decoys + 2 missiles)")
@@ -350,7 +359,7 @@ async def run(browser) -> None:
     ctx3 = await browser.new_context(viewport=PHONE)
     p3 = await ctx3.new_page()
     await p3.goto(BASE + "edf41.html")
-    await p3.evaluate("localStorage.setItem('wingdiverSave', JSON.stringify({shortRange:[0,1,2,3]}))")
+    await p3.evaluate("localStorage.setItem('wingdiverSave', JSON.stringify({'short-range':[0,1,2,3]}))")
     await p3.reload()
     await p3.wait_for_selector(".row")
     check(await p3.locator("#banner").is_visible(), "EDF 4.1 page offers to import the old checklist")
@@ -358,6 +367,54 @@ async def run(browser) -> None:
     await p3.wait_for_timeout(400)
     await p3.locator(".tab").nth(1).click()
     check(await p3.locator('.box[aria-pressed="true"]').count() == 4, "old checklist import marks the 4 weapons")
+
+    # ---- the lookup file uses the old site's real category names, and a complete checklist imports in full
+    legacy_map = json.loads((ROOT / "data" / "edf41-legacy.json").read_text(encoding="utf-8"))
+    shape = {key: {cat: len(slots) for cat, slots in cats.items()} for key, cats in legacy_map.items()}
+    check(shape == OLD_CHECKLIST, "edf41-legacy.json has the old checklist's own category names and sizes")
+    full = {key: {cat: list(range(n)) for cat, n in cats.items()} for key, cats in OLD_CHECKLIST.items()}
+    ticks = sum(n for cats in OLD_CHECKLIST.values() for n in cats.values())
+    export = {"version": 1, "exportedAt": "2026-01-01T00:00:00.000Z", "data": {}}  # the old site's export file
+    for key, cats in full.items():
+        export["data"][key] = cats
+        export["data"][key + "_count"] = str(sum(len(v) for v in cats.values()))
+        export["data"][key + "_total"] = str(sum(len(v) for v in cats.values()))
+    (tmp / "old-full.json").write_text(json.dumps(export, indent=2), encoding="utf-8")
+    c8 = await browser.new_context(viewport=PHONE)
+    p8 = await c8.new_page()
+    p8.on("dialog", lambda d: asyncio.ensure_future(d.accept()))
+    await p8.goto(BASE + "index.html")
+    await p8.set_input_files("#importfile", str(tmp / "old-full.json"))
+    await p8.wait_for_timeout(500)
+    check(ticks == 812 and "Imported 820" in await p8.locator("#notice").inner_text() and "820/827" in await p8.locator('[data-count="edf41"]').inner_text(),
+          "a complete old checklist export (812 entries) imports as 820 of 827 weapons")
+    await c8.close()
+    # the same checklist left in this browser by the old site, imported from the offer on HQ
+    c9 = await browser.new_context(viewport=PHONE)
+    p9 = await c9.new_page()
+    await p9.goto(BASE + "index.html")
+    await p9.evaluate("(save) => { for (const k of Object.keys(save)) localStorage.setItem(k, JSON.stringify(save[k])); }", full)
+    await p9.reload()
+    check("812 weapons checked" in await p9.locator("#notice").inner_text(), "HQ offers to import a checklist left on this device")
+    await p9.locator("#notice button", has_text="Import").click()
+    await p9.wait_for_timeout(500)
+    check("Imported 820" in await p9.locator("#notice").inner_text() and "820/827" in await p9.locator('[data-count="edf41"]').inner_text(), "the offer on HQ imports the complete checklist")
+    await p9.reload()
+    check(not await p9.locator("#notice").is_visible(), "the offer does not come back after importing")
+    # someone who imported before v1.4.1 (when most weapons were missed) is offered it once more; it only adds
+    await p9.evaluate("""() => { localStorage.setItem('edfTracker.legacyDone', '1');
+        localStorage.setItem('edfTracker.edf41', JSON.stringify({ owned: ['GenocideGun'], stars: {} })); }""")
+    await p9.goto(BASE + "edf41.html")
+    await p9.wait_for_selector(".row")
+    check(await p9.locator("#banner").is_visible() and "missed most of them" in await p9.locator("#banner").inner_text(), "an import from before the fix is offered once more")
+    await p9.locator('[data-act="legacy-import"]').click()
+    await p9.wait_for_timeout(500)
+    owned = json.loads(await p9.evaluate("localStorage.getItem('edfTracker.edf41')"))["owned"]
+    check(len(owned) == 821 and "GenocideGun" in owned, "importing again adds the missing weapons and keeps what was already marked")
+    await p9.reload()
+    await p9.wait_for_selector(".row")
+    check(not await p9.locator("#banner").is_visible(), "after that the offer is gone for good")
+    await c9.close()
 
     # ---- mouse users get compact rows
     c6 = await browser.new_context(viewport={"width": 1280, "height": 800})

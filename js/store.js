@@ -15,7 +15,11 @@
 //   games: { <game>: {...} },  profile2: { games: {...} },  profileNames: { 1, 2 } }   (games = profile 1)
 // ("version" is the file format; "appVersion" is the app release that wrote it.)
 // The old EDF 4.1 checklist (EDF-4.1-PWA) stored rangerSave / wingdiverSave /
-// airraiderSave / fencerSave; those are converted with data/edf41-legacy.json.
+// airraiderSave / fencerSave, each { categoryId: [position, ...] } with the old
+// site's own category ids ('assault-rifles', 'mid-range-electro', ...). Those are
+// converted with data/edf41-legacy.json, which must use exactly the same ids.
+//   edfTracker.legacyDone      '2' once that checklist was imported or declined
+//                              ('1' is from before v1.4.1, when the import missed most weapons)
 // ============================================================================
 
 export const GAMES = ['edf41', 'edf5', 'edf6'];
@@ -249,8 +253,11 @@ export function findLegacyOnDevice() {
   }
   return count > 0 ? { data, count } : null;
 }
-export function legacyDismissed() { return getRaw(P + 'legacyDone') === '1'; }
-export function markLegacyDone() { setRaw(P + 'legacyDone', '1'); }
+// Before v1.4.1 the import only matched 6 of the 31 categories, so anyone who
+// answered the offer back then ('1') is asked once more; '2' is the answer that counts.
+export function legacyDismissed() { return getRaw(P + 'legacyDone') === '2'; }
+export function legacyAskedBefore() { return getRaw(P + 'legacyDone') === '1'; }
+export function markLegacyDone() { setRaw(P + 'legacyDone', '2'); }
 
 // Merge legacy ids into the active profile's EDF 4.1 progress (never removes anything already marked).
 export async function importLegacy(legacyData) {

@@ -7,6 +7,14 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.4.1 – 2026-11-12
+### Fixed
+- **Importing the old EDF 4.1 checklist missed most weapons.** The lookup file used different category names (`assaultRifles`) from the ones the old site saves (`assault-rifles`), so only the six one-word categories matched: a complete checklist imported 161 weapons. `data/edf41-legacy.json` now uses the old site's own names, and a complete checklist imports all 812 entries as 820 of 827 weapons (each of the two "Pure Decoy Launchers" entries covers five launchers; the other 7 weapons were never on the old list).
+- Anyone who answered the import offer before this version is offered it once more, because that import was incomplete. Importing only adds weapons; nothing already marked is removed.
+
+### Changed
+- `tools/test_app.py` checks the import with the old site's real category names and export format, and with a complete checklist.
+
 ## v1.4.0 – 2026-11-12
 ### Added
 - **Text size slider** on HQ: any size from 60% to 150% in 5% steps, in place of the four fixed sizes (100–150%). Auto still follows the device, and a size saved before this version carries over. The weapon list's star meter narrows with small text so it stays in its column.
