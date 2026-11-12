@@ -7,6 +7,14 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.3.1 – 2026-11-11
+### Fixed
+- Browsers with a "force dark pages" feature (Opera GX, Chrome on Android, Samsung Internet) recolored the app: icons vanished from the title bar, selected tabs lost contrast and the toast turned brown. The pages now declare themselves dark, which turns that recoloring off.
+
+### Changed
+- The toast uses each game's own colors instead of one cream style.
+- EDF 5's Max button is steel blue instead of orange-brown.
+
 ## v1.3.0 – 2026-11-11
 ### Added
 - **Where each weapon drops:** mission ranges per difficulty for Offline, Online and the mission packs, from edf-calc's drop tables. EDF 5 and 6 show it on a Drops tab next to Upgrades; EDF 4.1 shows it in the weapon panel.
