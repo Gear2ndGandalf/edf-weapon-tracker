@@ -5,7 +5,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', function () {
     const sw = navigator.serviceWorker;
     const hadWorker = !!sw.controller; // false on the very first visit
-    sw.register('sw.js').catch(function () { /* offline support is optional */ });
+    sw.register('sw.js', { updateViaCache: 'none' }).catch(function () { /* offline support is optional */ });
     sw.ready.then(function (reg) {
       const game = document.body.getAttribute('data-game');
       if (game && reg.active) reg.active.postMessage({ type: 'keep-offline', game: game });

@@ -9,7 +9,7 @@
 //   edfTracker.profileNames    { 1: name, 2: name }
 //   edfTracker.ui.<game>       { cls, cat, filter, detailOpen, scroll }
 //   edfTracker.lastExport / edfTracker.lastChange   ISO dates, for the backup line on HQ
-//   edfTracker.prefs           { text: 'auto' | '1' | '1.15' | '1.3' | '1.5', fx: 'on' | 'off' }
+//   edfTracker.prefs           { text: 'auto' | '0.6' ... '1.5' (a scale, set with the HQ slider), fx: 'on' | 'off' }
 //
 // Export file format: { app: "edf-unlock-tracker", version: 1, appVersion, exportedAt,
 //   games: { <game>: {...} },  profile2: { games: {...} },  profileNames: { 1, 2 } }   (games = profile 1)
@@ -119,11 +119,18 @@ export function loadSummary(game, profile) {
 }
 
 // ---------- Display settings (applied by js/prefs.js on every page) ----------
-export const TEXT_SIZES = ['auto', '1', '1.15', '1.3', '1.5'];
+// Text size is 'auto' (follow the device) or a scale from TEXT_MIN to TEXT_MAX, stored as a string such as '0.85'.
+export const TEXT_MIN = 0.6;
+export const TEXT_MAX = 1.5;
+function cleanText(v) {
+  const n = typeof v === 'string' || typeof v === 'number' ? parseFloat(v) : NaN;
+  if (!(n > 0)) return 'auto';
+  return String(Math.round(Math.min(TEXT_MAX, Math.max(TEXT_MIN, n)) * 100) / 100);
+}
 export function loadPrefs() {
   const p = readJSON(P + 'prefs', {});
   return {
-    text: isObject(p) && TEXT_SIZES.indexOf(p.text) !== -1 ? p.text : 'auto',
+    text: isObject(p) ? cleanText(p.text) : 'auto',
     fx: isObject(p) && p.fx === 'off' ? 'off' : 'on',
   };
 }

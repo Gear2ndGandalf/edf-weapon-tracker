@@ -128,9 +128,27 @@ $('#segProfile').addEventListener('click', (e) => {
 });
 
 // ---------- Display settings ----------
+// Text size: the Auto button follows the device; moving the slider picks a fixed size.
+// While Auto is on, the slider and the number show the size in use.
+// (During an update a phone can briefly pair this script with its saved copy of
+// the previous index.html, which has no slider. Then the text-size control is
+// left alone, and the next visit loads matching files.)
+const textRange = $('#textRange');
+const textAuto = $('#textAuto');
+const textValue = $('#textValue');
+const hasTextSlider = !!(textRange && textAuto && textValue);
 function showPrefs() {
   const p = store.loadPrefs();
-  document.querySelectorAll('#segText button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.text === p.text)));
+  if (hasTextSlider) {
+    const auto = p.text === 'auto';
+    const inUse = parseFloat(document.documentElement.style.getPropertyValue('--ts')) || 1; // set by js/prefs.js
+    const pct = Math.round((auto ? inUse : parseFloat(p.text)) * 100);
+    textAuto.setAttribute('aria-pressed', String(auto));
+    textRange.classList.toggle('is-auto', auto);
+    if (Number(textRange.value) !== pct) textRange.value = String(pct); // the slider snaps it to its own steps
+    textRange.setAttribute('aria-valuetext', pct + '%' + (auto ? ', automatic' : ''));
+    textValue.textContent = pct + '%';
+  }
   document.querySelectorAll('#segFx button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.fx === p.fx)));
 }
 function changePref(key, value) {
@@ -140,10 +158,10 @@ function changePref(key, value) {
   if (window.EDFPrefs) window.EDFPrefs.apply();
   showPrefs();
 }
-$('#segText').addEventListener('click', (e) => {
-  const b = e.target.closest ? e.target.closest('button[data-text]') : null;
-  if (b) changePref('text', b.dataset.text);
-});
+if (hasTextSlider) {
+  textAuto.addEventListener('click', () => changePref('text', 'auto'));
+  textRange.addEventListener('input', () => changePref('text', String(Number(textRange.value) / 100)));
+}
 $('#segFx').addEventListener('click', (e) => {
   const b = e.target.closest ? e.target.closest('button[data-fx]') : null;
   if (b) changePref('fx', b.dataset.fx);

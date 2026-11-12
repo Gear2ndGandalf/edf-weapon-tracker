@@ -38,13 +38,17 @@ const OFFLINE_PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"
   '<p>This game has not been opened on this device while online. Connect to the internet and open it once; ' +
   'after that it works offline.</p><p><a href="index.html">Back to HQ</a></p></body></html>';
 
+// Files are fetched past the browser's own HTTP cache, so a new version never
+// starts out with a stale copy of a file.
+const fresh = (url) => new Request(url, { cache: 'reload' });
+
 // Save one game's files, skipping anything already cached.
 function keepOffline(game) {
   const files = GAMES[game];
   if (!files) return Promise.resolve();
   return caches.open(CACHE).then((cache) =>
     Promise.all(SHARED_GAME.concat(files).map((url) =>
-      cache.match(url).then((hit) => hit || cache.add(url).catch(() => { /* retried on the next visit */ }))
+      cache.match(url).then((hit) => hit || cache.add(fresh(url)).catch(() => { /* retried on the next visit */ }))
     ))
   );
 }
@@ -54,7 +58,7 @@ function gameOf(url) {
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map(fresh))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {

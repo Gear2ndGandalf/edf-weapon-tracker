@@ -170,7 +170,7 @@ a { color: var(--link); }
 .meter { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-right: 8px; }
 .meter__text { font-family: var(--font-mono); font-size: calc(12px * var(--ts, 1)); color: var(--count); }
 .row.is-cur .meter__text { color: inherit; }
-.meter__track { display: block; width: 46px; height: 4px; background-color: var(--meter-track); }
+.meter__track { display: block; width: 46px; width: min(46px, calc(46px * var(--ts, 1))); height: 4px; background-color: var(--meter-track); } /* narrower below 100% text, so it stays inside its column */
 .meter__track > span { display: block; height: 100%; background-color: var(--meter); }
 .meter__track > span.is-max { background-color: var(--meter-max); }
 

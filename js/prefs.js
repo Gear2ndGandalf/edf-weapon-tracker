@@ -33,9 +33,17 @@
   function apply() {
     const p = read();
     const root = document.documentElement;
-    let ts = p.text && p.text !== 'auto' ? parseFloat(p.text) : systemScale();
-    if (!(ts > 0)) ts = 1;
-    ts = Math.min(1.6, Math.max(0.85, Math.round(ts * 100) / 100));
+    // A size picked on HQ (60% to 150%) wins; anything else means Auto: follow the device.
+    const picked = p.text && p.text !== 'auto' ? parseFloat(p.text) : NaN;
+    let ts;
+    if (picked > 0) {
+      ts = Math.min(1.5, Math.max(0.6, picked));
+    } else {
+      ts = systemScale();
+      if (!(ts > 0)) ts = 1;
+      ts = Math.min(1.6, Math.max(0.85, ts));
+    }
+    ts = Math.round(ts * 100) / 100;
     root.style.setProperty('--ts', String(ts));
     if (p.fx === 'off') root.classList.add('no-fx'); else root.classList.remove('no-fx');
     // Large text needs more room than one phone screen: the game pages switch to a scrolling layout.

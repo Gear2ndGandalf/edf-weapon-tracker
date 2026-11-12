@@ -29,6 +29,8 @@ if os.environ.get("EDF_QUICK"):  # faster run while developing: four representat
     SIZES = [(320, 568), (390, 844), (844, 390), (1280, 800)]
 fails: list[str] = []
 SERVER = None
+# Moves the HQ text-size slider the way a drag does: set the value, then fire "input".
+SET_TEXT = "(v) => { const r = document.querySelector('#textRange'); r.value = String(v); r.dispatchEvent(new Event('input', { bubbles: true })); }"
 
 
 def check(ok: bool, msg: str) -> None:
@@ -100,7 +102,7 @@ async def run(browser) -> None:
     await pg.locator('[data-act="filter"][data-i="0"]').click()
 
     # ---- where a weapon drops
-    data6 = json.loads((ROOT / "data" / "edf6.json").read_text())
+    data6 = json.loads((ROOT / "data" / "edf6.json").read_text(encoding="utf-8"))
     await pg.locator(".row__name").nth(2).click()
     await pg.locator('[data-act="view"][data-i="1"]').click()
     level = int(await pg.locator(".row.is-cur .row__lv").inner_text())
@@ -216,7 +218,7 @@ async def run(browser) -> None:
     async with pg.expect_download() as dl:
         await pg.click("#export")
     path = await (await dl.value).path()
-    exp = json.loads(Path(path).read_text())
+    exp = json.loads(Path(path).read_text(encoding="utf-8"))
     check(exp["app"] == "edf-unlock-tracker" and len(exp["games"]["edf6"]["owned"]) == 2, "export file has the progress")
     backup = await pg.locator("#backup").inner_text()
     check(backup.startswith("Last export:") and "changed" not in backup, f"HQ shows the last export date ({backup})")
@@ -252,8 +254,9 @@ async def run(browser) -> None:
     await pg.goto(BASE + "index.html")
 
     # ---- display settings
-    await pg.locator('#segText button[data-text="1.3"]').click()
+    await pg.evaluate(SET_TEXT, 130)
     check(await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--ts').trim()") == "1.3", "text size 130% applies on HQ")
+    check((await pg.locator("#textValue").inner_text()).strip() == "130%" and await pg.locator("#textAuto").get_attribute("aria-pressed") == "false", "the slider shows 130% and Auto is off")
     await pg.locator('#segFx button[data-fx="off"]').click()
     await pg.goto(BASE + "edf5.html")
     await pg.wait_for_selector(".row")
@@ -263,9 +266,21 @@ async def run(browser) -> None:
     moving = await pg.evaluate("document.getAnimations().filter((a) => a.animationName && a.playState === 'running').length")
     check(moving == 0 and await pg.evaluate("document.documentElement.classList.contains('no-fx')"), "Background effects Off stops every animation")
     await pg.goto(BASE + "index.html")
-    await pg.locator('#segText button[data-text="auto"]').click()
     await pg.locator('#segFx button[data-fx="on"]').click()
+    await pg.evaluate(SET_TEXT, 60)
+    small = await pg.evaluate("parseFloat(getComputedStyle(document.querySelector('.card__name')).fontSize)")
+    check(await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--ts').trim()") == "0.6" and abs(small - 18) < 0.2, "text size goes down to 60%")
+    await pg.locator("#textRange").focus()
+    await pg.keyboard.press("ArrowRight")
+    check((await pg.locator("#textValue").inner_text()).strip() == "65%" and json.loads(await pg.evaluate("localStorage.getItem('edfTracker.prefs')"))["text"] == "0.65", "arrow keys move the slider in 5% steps and the size is saved")
+    await pg.reload()
+    check(await pg.locator("#textRange").input_value() == "65" and await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--ts').trim()") == "0.65", "the chosen text size survives a reload")
+    await pg.evaluate("localStorage.setItem('edfTracker.prefs', JSON.stringify({text: '9', fx: 'on'}))")
+    await pg.reload()
+    check(await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--ts').trim()") == "1.5" and await pg.locator("#textRange").input_value() == "150", "an out-of-range saved text size is limited to 150%")
+    await pg.locator("#textAuto").click()
     check(await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--ts').trim()") == "1", "Auto text size is 100% on a default device")
+    check(await pg.locator("#textAuto").get_attribute("aria-pressed") == "true" and await pg.locator("#textRange").input_value() == "100", "Auto is on and the slider shows the size in use")
 
     # ---- profiles
     p1_count = await pg.locator('[data-count="edf6"]').inner_text()
@@ -286,7 +301,7 @@ async def run(browser) -> None:
     async with pg.expect_download() as dl2:
         await pg.click("#export")
     path2 = await (await dl2.value).path()
-    exp2 = json.loads(Path(path2).read_text())
+    exp2 = json.loads(Path(path2).read_text(encoding="utf-8"))
     check(len(exp2["profile2"]["games"]["edf6"]["owned"]) == 1 and len(exp2["games"]["edf6"]["owned"]) == 2 and exp2["profileNames"]["2"] == "Console <b>", "export holds both profiles and their names")
     await pg.locator('#segProfile button[data-profile="1"]').click()
     check(await pg.locator('[data-count="edf6"]').inner_text() == p1_count, "switching back restores profile 1")
@@ -309,16 +324,16 @@ async def run(browser) -> None:
     await p2.wait_for_timeout(400)
     check("2/1564" in await p2.locator('[data-count="edf6"]').inner_text(), "import restores progress in a fresh browser")
     tmp = Path(tempfile.mkdtemp())
-    (tmp / "legacy.json").write_text(json.dumps({"version": 1, "data": {"rangerSave": {"assaultRifles": [0, 1, 2], "specialWeapons": [0]}, "fencerSave": {"missileLaunchers": [0, 1]}}}))
+    (tmp / "legacy.json").write_text(json.dumps({"version": 1, "data": {"rangerSave": {"assaultRifles": [0, 1, 2], "specialWeapons": [0]}, "fencerSave": {"missileLaunchers": [0, 1]}}}), encoding="utf-8")
     await p2.set_input_files("#importfile", str(tmp / "legacy.json"))
     await p2.wait_for_timeout(400)
     check("Imported 10" in await p2.locator("#notice").inner_text(), "old EDF 4.1 export imports (3 rifles + 5 decoys + 2 missiles)")
-    (tmp / "bad.json").write_text("not json")
+    (tmp / "bad.json").write_text("not json", encoding="utf-8")
     await p2.set_input_files("#importfile", str(tmp / "bad.json"))
     await p2.wait_for_timeout(300)
     check("not valid JSON" in await p2.locator("#notice").inner_text(), "broken file gives a clear message")
     evil = {"app": "edf-unlock-tracker", "version": 1, "games": {"edf6": {"owned": ["AssultRifle01", 5, {"x": 1}, "<img src=x onerror=alert(1)>"], "stars": {"AssultRifle01": [99, -3, "x"], "__proto__": [1], "bad": "str"}}}}
-    (tmp / "evil.json").write_text(json.dumps(evil))
+    (tmp / "evil.json").write_text(json.dumps(evil), encoding="utf-8")
     await p2.set_input_files("#importfile", str(tmp / "evil.json"))
     await p2.wait_for_timeout(300)
     await p2.goto(BASE + "edf6.html")
@@ -352,8 +367,31 @@ async def run(browser) -> None:
     check(await p6.evaluate("Math.round(document.querySelector('.row').getBoundingClientRect().height)") <= 38, "desktop rows are compact")
     await c6.close()
 
+    # ---- HQ fits on one phone screen: nothing is cut off above the game bar
+    for w, h in [(402, 874), (390, 844), (412, 800)]:
+        c = await browser.new_context(viewport={"width": w, "height": h})
+        p = await c.new_page()
+        await p.goto(BASE + "index.html")
+        await p.evaluate("document.fonts.ready")
+        fit = await p.evaluate("""() => { const m = document.querySelector('.hq-main'), b = m.getBoundingClientRect();
+            const cut = [...document.querySelectorAll('.hq-main button, .hq-main a, .hq-main input')].filter((e) => { const r = e.getBoundingClientRect(); return r.height && r.bottom > b.bottom + 0.5; }).length;
+            return { over: m.scrollHeight - m.clientHeight, cut, cards: [...document.querySelectorAll('.card')].map((e) => Math.round(e.getBoundingClientRect().height)) }; }""")
+        check(fit["over"] <= 0 and fit["cut"] == 0 and min(fit["cards"]) >= 70, f"HQ fits a {w}x{h} phone without scrolling {fit}")
+        await c.close()
+
+    # ---- 60% text: the star meter stays inside its own column
+    c = await browser.new_context(viewport=PHONE)
+    p = await c.new_page()
+    await p.add_init_script("localStorage.setItem('edfTracker.prefs', JSON.stringify({text: '0.6', fx: 'on'}))")
+    await p.goto(BASE + "edf5.html")
+    await p.wait_for_selector(".row")
+    gap = await p.evaluate("""() => { const row = document.querySelector('.row');
+        return row.querySelector('.meter__track').getBoundingClientRect().left - row.querySelector('.row__lv').getBoundingClientRect().right; }""")
+    check(gap >= -0.5, f"at 60% text the star meter does not run into the level ({gap:.1f}px apart)")
+    await c.close()
+
     # ---- layout at every size
-    for page_name, text in [(n, t) for t in ("1", "1.5") for n in ("edf41", "edf5", "edf6", "index")]:
+    for page_name, text in [(n, t) for t in ("0.6", "1", "1.5") for n in ("edf41", "edf5", "edf6", "index")]:
         bad = []
         for w, h in SIZES:
             c = await browser.new_context(viewport={"width": w, "height": h})
@@ -373,7 +411,7 @@ async def run(browser) -> None:
             if r["docW"] > w or r["overlap"] or r["off"] or r["cut"] or r["listH"] < 130:
                 bad.append((w, h, r))
             await c.close()
-        check(not bad, f"{page_name}: layout holds at {len(SIZES)} screen sizes, text {int(float(text) * 100)}% {bad or ''}")
+        check(not bad, f"{page_name}: layout holds at {len(SIZES)} screen sizes, text {round(float(text) * 100)}% {bad or ''}")
 
     check(not external, f"no requests leave the site {sorted(set(external))[:3] or ''}")
     check(not errors, f"no script or console errors {errors[:3] or ''}")

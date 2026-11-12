@@ -7,6 +7,20 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.4.0 – 2026-11-12
+### Added
+- **Text size slider** on HQ: any size from 60% to 150% in 5% steps, in place of the four fixed sizes (100–150%). Auto still follows the device, and a size saved before this version carries over. The weapon list's star meter narrows with small text so it stays in its column.
+
+### Fixed
+- **HQ on phones:** Export progress and Import progress were cut off behind the game bar on most phones. The game cards now give up height first and each setting sits on one row, so HQ fits on one screen on phones from about 800px tall (checked at 402×874, 390×844 and 412×800). On shorter screens HQ still scrolls, and now fades out above the game bar to show that it does.
+- Firefox logged about 100 "glyph bbox was incorrect" warnings: the two Rajdhani font files stored wrong bounding boxes for 51 glyphs. They are rebuilt with correct boxes; outlines, metrics and character set are unchanged.
+- A new version could start out with stale copies of some files for a few minutes after publishing. The offline cache now fetches its files past the browser's HTTP cache, and so does the update check.
+- HQ asks iPhones not to enlarge its text in landscape, as the game pages already did.
+- `tools/test_app.py` failed on Windows because it read files without naming UTF-8.
+
+### Changed
+- The HQ title goes on one line on shorter phone screens.
+
 ## v1.3.1 – 2026-11-11
 ### Fixed
 - Browsers with a "force dark pages" feature (Opera GX, Chrome on Android, Samsung Internet) recolored the app: icons vanished from the title bar, selected tabs lost contrast and the toast turned brown. The pages now declare themselves dark, which turns that recoloring off.
