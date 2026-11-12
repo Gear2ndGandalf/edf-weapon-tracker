@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>EDF Unlock Tracker</title>
+  <meta name="description" content="Track weapon and vehicle unlocks and star upgrades for Earth Defense Force 4.1, 5 and 6.">
+  <meta name="theme-color" content="#0c0d10">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EDF Tracker">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="preload" href="fonts/oxanium-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/hq.css">
+  <script src="js/version.js"></script>
+  <script src="js/prefs.js"></script>
+</head>
+<body>
+<div class="hq">
+  <div class="hq-bg" aria-hidden="true">
+    <div class="hq-dots"></div>
+    <div class="hq-stream" style="top:34%;animation-delay:0s"></div><div class="hq-stream" style="top:57%;animation-delay:-2.5s"></div><div class="hq-stream" style="top:81%;animation-delay:-1.2s"></div>
+    <div class="globe">
+      <div class="globe__edge"></div>
+      <div class="globe__mer" style="animation-delay:0s"></div><div class="globe__mer" style="animation-delay:-2s"></div><div class="globe__mer" style="animation-delay:-4s"></div><div class="globe__mer" style="animation-delay:-6s"></div>
+      <div class="globe__lat" style="transform:scaleY(.34)"></div>
+      <div class="globe__lat" style="transform:scaleY(.68);opacity:.8"></div>
+      <div class="globe__dot"></div>
+      <div class="globe__ping"></div>
+      <div class="globe__orbit"><div class="globe__path"></div><div class="globe__sat"></div></div>
+    </div>
+  </div>
+
+  <main class="hq-main">
+    <header class="hq-head">
+      <div class="hq-kicker">EDF HQ · ARMORY RECORDS</div>
+      <h1>UNLOCK<br>TRACKER</h1>
+      <div class="hq-bars" aria-hidden="true"><span></span><span></span><span></span></div>
+    </header>
+
+    <noscript><p class="notice">The tracker needs JavaScript. Turn it on in your browser settings and reload.</p></noscript>
+
+    <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
+
+    <div class="cards">
+      <a class="card card--41" href="edf41.html">
+        <div class="card__fx" aria-hidden="true"><div class="fx41-grid"></div><div class="fx41-radar"><div class="fx41-sweep"></div></div></div>
+        <div class="card__body">
+          <div class="card__top"><span class="card__name">EDF 4.1</span><span class="card__count" data-count="edf41">0/827</span></div>
+          <div class="card__sub">The Shadow of New Despair</div>
+          <div class="card__bar"><span data-bar="edf41" style="width:0%"></span></div>
+        </div>
+      </a>
+      <a class="card card--5" href="edf5.html">
+        <div class="card__fx" aria-hidden="true"><div class="fx5-grid"></div><div class="fx5-ring"></div><div class="fx5-scan"></div></div>
+        <div class="card__body">
+          <div class="card__top"><span class="card__name">EDF 5</span><span class="card__count" data-count="edf5">0/1187</span></div>
+          <div class="card__bar"><span data-bar="edf5" style="width:0%"></span></div>
+        </div>
+      </a>
+      <a class="card card--6" href="edf6.html">
+        <div class="card__fx" aria-hidden="true"><div class="fx6-move"><div class="fx6-rh"></div><div class="fx6-rhl"></div></div><div class="fx6-grid"></div><div class="fx6-hazard"></div></div>
+        <div class="card__body">
+          <div class="card__top"><span class="card__name">EDF 6</span><span class="card__count" data-count="edf6">0/1564</span></div>
+          <div class="card__bar"><span data-bar="edf6" style="width:0%"></span></div>
+        </div>
+      </a>
+    </div>
+
+    <section class="settings" aria-label="Settings">
+      <div class="setting" role="group" aria-labelledby="lblProfile">
+        <span class="setting__label" id="lblProfile">Profile</span>
+        <div class="seg" id="segProfile">
+          <button type="button" data-profile="1">Profile 1</button>
+          <button type="button" data-profile="2">Profile 2</button>
+          <button type="button" id="renameProfile" title="Rename the selected profile">Rename</button>
+        </div>
+      </div>
+      <div class="setting" role="group" aria-labelledby="lblText">
+        <span class="setting__label" id="lblText">Text size</span>
+        <div class="seg" id="segText">
+          <button type="button" data-text="auto" title="Follow this device's text size">Auto</button>
+          <button type="button" data-text="1">100%</button>
+          <button type="button" data-text="1.15">115%</button>
+          <button type="button" data-text="1.3">130%</button>
+          <button type="button" data-text="1.5">150%</button>
+        </div>
+      </div>
+      <div class="setting" role="group" aria-labelledby="lblFx">
+        <span class="setting__label" id="lblFx">Background effects</span>
+        <div class="seg" id="segFx">
+          <button type="button" data-fx="on">On</button>
+          <button type="button" data-fx="off" title="Stops the moving backgrounds to save battery">Off</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="spacer"></div>
+    <div class="actions">
+      <button type="button" class="hq-btn" id="export">Export progress</button>
+      <button type="button" class="hq-btn" id="import">Import progress</button>
+      <input type="file" id="importfile" accept="application/json,.json" hidden>
+    </div>
+    <p class="backup" id="backup" hidden></p>
+    <p class="credit"><span id="version"></span> · Weapon data and drop tables from <a href="https://github.com/zeddidragon/edf-calc" rel="noopener">edf-calc</a> by Tony Sæle (zeddidragon)</p>
+  </main>
+
+  <nav class="nav" aria-label="Games">
+    <a href="index.html" aria-current="page">HQ</a>
+    <a href="edf41.html">4.1</a>
+    <a href="edf5.html">5</a>
+    <a href="edf6.html">6</a>
+  </nav>
+</div>
+<script type="module" src="js/hq.js"></script>
+<script src="js/sw-register.js" defer></script>
+</body>
+</html>

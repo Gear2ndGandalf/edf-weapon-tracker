@@ -1,0 +1,23 @@
+{
+  "name": "EDF Unlock Tracker",
+  "short_name": "EDF Tracker",
+  "description": "Track weapon and vehicle unlocks and star upgrades for Earth Defense Force 4.1, 5 and 6.",
+  "lang": "en",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0d10",
+  "theme_color": "#0c0d10",
+  "categories": ["games", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "EDF 4.1", "url": "./edf41.html" },
+    { "name": "EDF 5", "url": "./edf5.html" },
+    { "name": "EDF 6", "url": "./edf6.html" }
+  ]
+}
