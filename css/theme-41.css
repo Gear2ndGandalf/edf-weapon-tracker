@@ -1,0 +1,42 @@
+/* EDF 4.1 theme: colors, fonts and animated background. Layout lives in app.css.
+   Background motion uses transform/opacity only, so the GPU handles it. */
+:root {
+  --bg: #04110a; --text: #e3f5e7; --dim: #a3cdb0; --link: #8fd3e6; --focus: #8fd3e6;
+  --font: 'Saira Condensed', system-ui, sans-serif; --font-mono: 'Share Tech Mono', ui-monospace, monospace; --font-stars: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols 2', 'DejaVu Sans', sans-serif;
+  --title-pad: 0 2px; --title-bg: transparent; --title-border: 0;
+  --h1-size: 34px; --h1-weight: 700; --h1-spacing: 1px; --h1-color: #ffffff;
+  --pill-bg: rgba(6,42,18,.85); --pill-border: #4fb36e; --pill-fg: #e3f5e7;
+  --tab-bg: rgba(6,42,18,.72); --tab-fg: #e3f5e7; --tab-act: #8fd3e6; --tab-act-fg: #04110a; --tab-border: #4fb36e;
+  --bar: #5ccf7e; --bar-track: rgba(4,17,10,.9); --bar-act: #04110a;
+  --btn-bg: #2f5f9e; --btn-fg: #ffffff; --btn-border: #6f93c8; --cat-bg: #2f5f9e; --cat-fg: #ffffff;
+  --input-bg: rgba(4,17,10,.85); --input-fg: #ffffff; --input-border: #4fb36e;
+  --chip-bg: rgba(6,42,18,.72); --chip-fg: #e3f5e7; --chip-act: #5ccf7e; --chip-act-fg: #04110a; --chip-border: #4fb36e;
+  --panel-bg: rgba(4,22,12,.72); --panel-border: #4fb36e; --head-bg: #2f5f9e; --head-fg: #ffffff; --head-check: #2f5f9e; --line: rgba(79,179,110,.45);
+  --cur-bg: #8fd3e6; --cur-fg: #04110a; --own-fg: #ffffff; --dim-fg: #a3cdb0;
+  --box: #5ccf7e; --box-fill: #5ccf7e; --box-fg: #04110a; --count: #bfe6c9;
+  --badge-bg: #e3d36a; --badge-fg: #04110a; --meter: #5ccf7e; --meter-max: #e3d36a; --meter-track: rgba(6,42,18,.9);
+  --dhead-bg: #2f5f9e; --dhead-fg: #ffffff;
+  --accent-bg: #8fd3e6; --accent-fg: #04110a; --accent-border: #8fd3e6;
+  --ghost-bg: rgba(6,42,18,.8); --ghost-fg: #e3f5e7; --ghost-border: #4fb36e;
+  --star: #8fd3e6; --star-off: #3d6b4b;
+  --hover-bg: rgba(92,207,126,.12);
+  --toast-bg: #062a12; --toast-fg: #e3f5e7; --toast-border: #5ccf7e;
+  --nav-bg: rgba(6,42,18,.8); --nav-fg: #e3f5e7; --nav-act: #5ccf7e; --nav-act-fg: #04110a; --nav-border: #4fb36e;
+}
+/* Selected row: steady white outline (no blinking). */
+.row.is-cur { box-shadow: inset 0 0 0 2px #ffffff; }
+
+@keyframes thGrid { 0% { transform: translate(0, 0); } 100% { transform: translate(32px, 32px); } }
+@keyframes thSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes thBlip { 0% { opacity: 0; transform: scale(.4); } 12% { opacity: 1; transform: scale(1); } 70% { opacity: .85; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+@keyframes thPing { 0% { opacity: .75; transform: scale(.4); } 100% { opacity: 0; transform: scale(3.2); } }
+.th-grid { position: absolute; top: -32px; left: -32px; right: 0; bottom: 0; will-change: transform; background-image: linear-gradient(rgba(92,207,126,.15) 1px, transparent 1px), linear-gradient(90deg, rgba(92,207,126,.15) 1px, transparent 1px); background-size: 32px 32px; animation: thGrid 4s linear infinite; }
+.th-radar { position: absolute; right: -40px; top: 52px; width: 220px; height: 220px; }
+.th-ring { position: absolute; border-radius: 50%; border: 2px solid rgba(110,190,220,.24); }
+.th-sweep { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 50%; background: conic-gradient(rgba(110,190,220,.26), rgba(110,190,220,0) 25%, rgba(110,190,220,0)); animation: thSpin 6s linear infinite; }
+.th-stripe { position: absolute; left: 0; top: 64px; width: 200px; height: 4px; background-color: #5ccf7e; opacity: .8; transform: skewX(-30deg); transform-origin: left; }
+.th-blips { position: absolute; left: 0; bottom: 0; width: 62%; height: 44%; }
+.th-range { position: absolute; border-radius: 50%; border: 2px solid rgba(208,87,77,.14); }
+.th-blip, .th-ping { position: absolute; width: 9px; height: 9px; margin: -4px 0 0 -4px; border-radius: 50%; }
+.th-blip { opacity: .85; background-color: #d0574d; box-shadow: 0 0 8px rgba(208,87,77,.75); animation: thBlip 3.2s ease-out infinite; }
+.th-ping { border: 2px solid rgba(208,87,77,.7); animation: thPing 3.2s ease-out infinite; }

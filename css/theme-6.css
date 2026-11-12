@@ -1,0 +1,46 @@
+/* EDF 6 theme: colors, fonts and animated background. Layout lives in app.css.
+   Background motion uses transform/opacity only, so the GPU handles it. */
+:root {
+  --bg: #2b2620; --text: #f0e7d4; --dim: #b3a993; --link: #e2c25a; --focus: #e2c25a;
+  --font: 'Share Tech Mono', ui-monospace, monospace; --font-mono: 'Share Tech Mono', ui-monospace, monospace; --font-stars: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols 2', 'DejaVu Sans', sans-serif;
+  --title-pad: 0 8px 4px; --title-bg: linear-gradient(#6f685c, #4a443b); --title-border: 2px solid #a9a08f;
+  --h1-size: 26px; --h1-weight: 400; --h1-spacing: 4px; --h1-color: #f0e7d4;
+  --pill-bg: rgba(20,17,13,.88); --pill-border: #8a8170; --pill-fg: #e2c25a;
+  --tab-bg: rgba(28,24,20,.72); --tab-fg: #f0e7d4; --tab-act: #c9a646; --tab-act-fg: #1a160f; --tab-border: #8a8170;
+  --bar: #c9a646; --bar-track: rgba(20,17,13,.9); --bar-act: #1a160f;
+  --btn-bg: rgba(28,24,20,.78); --btn-fg: #f0e7d4; --btn-border: #a9a08f; --cat-bg: rgba(28,24,20,.78); --cat-fg: #f0e7d4;
+  --cat-size: 16px; --cat-spacing: 2px;
+  --input-bg: rgba(20,17,13,.85); --input-fg: #f0e7d4; --input-border: #a9a08f;
+  --chip-bg: rgba(28,24,20,.72); --chip-fg: #f0e7d4; --chip-act: #c9a646; --chip-act-fg: #1a160f; --chip-border: #8a8170;
+  --panel-bg: rgba(28,24,20,.66); --panel-border: #a9a08f; --head-bg: rgba(70,62,52,.9); --head-fg: #f0e7d4; --head-check: #2b2620; --line: rgba(138,129,112,.35);
+  --cur-bg: rgba(122,84,30,.88); --cur-fg: #ffffff; --own-fg: #f0e7d4; --dim-fg: #b3a993;
+  --box: #a9a08f; --box-fill: #c9a646; --box-fg: #1a160f; --count: #e2c25a;
+  --badge-bg: #a9a08f; --badge-fg: #1a160f; --meter: #a98445; --meter-max: #e2c25a; --meter-track: rgba(20,17,13,.9);
+  --dhead-bg: rgba(70,62,52,.9); --dhead-fg: #f0e7d4;
+  --accent-bg: #8a5f1c; --accent-fg: #ffffff; --accent-border: #d9b54a;
+  --ghost-bg: rgba(50,44,37,.88); --ghost-fg: #f0e7d4; --ghost-border: #8a8170;
+  --star: #e2c25a; --star-off: #6b6253;
+  --hover-bg: rgba(226,194,90,.12);
+  --toast-bg: #2b2620; --toast-fg: #f0e7d4; --toast-border: #c9a646;
+  --nav-bg: rgba(28,24,20,.8); --nav-fg: #f0e7d4; --nav-act: #c9a646; --nav-act-fg: #1a160f; --nav-border: #8a8170;
+}
+.titlebar { outline: 1px solid #15120e; }
+.titlebar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background-image: repeating-linear-gradient(-45deg, #c9a646 0 8px, #1a160f 8px 16px); }
+.row.is-cur { animation: thPulse 1.4s ease-in-out infinite; }
+
+@keyframes rhDrift { 0% { transform: translate(0, 0); } 100% { transform: translate(384px, 384px); } }
+@keyframes rhLight { 0%, 100% { opacity: 0; } 50% { opacity: .32; } }
+@keyframes rhDark { 0%, 100% { opacity: .5; } 50% { opacity: 0; } }
+@keyframes thGrid { 0% { transform: translate(0, 0); } 100% { transform: translate(32px, 32px); } }
+@keyframes thScan { 0% { transform: translateY(-10vh); } 100% { transform: translateY(110vh); } }
+@keyframes thPulse { 0%, 100% { box-shadow: inset 0 0 0 2px #a98445; } 50% { box-shadow: inset 0 0 0 2px #e2c25a; } }
+.th-rh-move { position: absolute; top: -384px; left: -384px; right: 0; bottom: 0; will-change: transform; animation: rhDrift 140s linear infinite; }
+.th-rh, .th-rh-l, .th-rh-l2, .th-rh-d { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-size: 384px 384px; }
+.th-rh { background-image: url(../img/rh-base.svg); }
+/* The opacity values below are what shows when motion is turned off. */
+.th-rh-d { opacity: .25; background-image: url(../img/rh-dark.svg); animation: rhDark 9s ease-in-out infinite; }
+.th-rh-l { opacity: .14; background-image: url(../img/rh-light.svg); animation: rhLight 7s ease-in-out infinite; }
+.th-rh-l2 { opacity: .1; background-image: url(../img/rh-light.svg); background-position: 128px 64px; animation: rhLight 11s ease-in-out -4s infinite; }
+.th-vignette { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-image: radial-gradient(ellipse at 50% 40%, rgba(20,17,13,.1) 30%, rgba(20,17,13,.6) 100%); }
+.th-grid { position: absolute; top: -32px; left: -32px; right: 0; bottom: 0; will-change: transform; background-image: linear-gradient(90deg, rgba(225,205,150,.09) 1px, transparent 1px), linear-gradient(rgba(225,205,150,.09) 1px, transparent 1px); background-size: 32px 32px; animation: thGrid 8s linear infinite; }
+.th-scan { position: absolute; left: 0; right: 0; top: 0; height: 80px; background-image: linear-gradient(rgba(226,194,90,0), rgba(226,194,90,.06), rgba(226,194,90,0)); animation: thScan 8s linear infinite; }

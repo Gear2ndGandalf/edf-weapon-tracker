@@ -1,0 +1,57 @@
+/* ==========================================================================
+   base.css – loaded by every page: self-hosted fonts, icons, shared helpers.
+   Fonts are SIL Open Font License files (see fonts/licenses).
+   ========================================================================== */
+
+@font-face { font-family: 'Rajdhani'; font-style: normal; font-weight: 500; font-display: swap; src: url(../fonts/rajdhani-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Rajdhani'; font-style: normal; font-weight: 600; font-display: swap; src: url(../fonts/rajdhani-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Saira Condensed'; font-style: normal; font-weight: 500; font-display: swap; src: url(../fonts/saira-condensed-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Saira Condensed'; font-style: normal; font-weight: 600; font-display: swap; src: url(../fonts/saira-condensed-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Saira Condensed'; font-style: normal; font-weight: 700; font-display: swap; src: url(../fonts/saira-condensed-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Oxanium'; font-style: normal; font-weight: 600; font-display: swap; src: url(../fonts/oxanium-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Oxanium'; font-style: normal; font-weight: 700; font-display: swap; src: url(../fonts/oxanium-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Share Tech Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(../fonts/share-tech-mono-latin-400-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* The app is already dark. Saying so stops browsers' "force dark pages" features
+   (Opera GX, Chrome on Android, Samsung Internet) from recoloring it. */
+:root {
+  color-scheme: dark;
+  --img-star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.6l2.9 6.1 6.7.8-4.9 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.9-4.6 6.7-.8z'/%3E%3C/svg%3E");
+  --img-star-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.6l2.9 6.1 6.7.8-4.9 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.9-4.6 6.7-.8z' fill='none' stroke='%23000' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --img-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 12.5l5.2 5.2L20 6.5' fill='none' stroke='%23000' stroke-width='3.4' stroke-linecap='square'/%3E%3C/svg%3E");
+}
+
+/* Anything with the hidden attribute stays hidden, even if a class sets display. */
+[hidden] { display: none !important; }
+
+/* No double-tap zoom delay on controls. */
+a, button, input, label { touch-action: manipulation; }
+
+/* Icons are drawn with CSS masks so they look the same on every device and font. */
+.ico {
+  display: inline-block; flex: none; width: .82em; height: .82em; vertical-align: -.06em;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+}
+.ico--star { -webkit-mask-image: var(--img-star); mask-image: var(--img-star); }
+.ico--check { -webkit-mask-image: var(--img-check); mask-image: var(--img-check); }
+.caret { display: inline-block; flex: none; width: 0; height: 0; margin-left: 6px; vertical-align: middle; border: 5px solid transparent; border-bottom-width: 0; border-top-color: currentColor; }
+.caret--up { border-width: 0 5px 5px; border-top-color: transparent; border-bottom-color: currentColor; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Motion off: the system "reduce motion" setting, or Background effects = Off on HQ.
+   Layers that only make sense while moving are hidden. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .th-ping, .th-scan, .hq-stream, .globe__ping, .fx5-scan { display: none; }
+}
+html.no-fx *, html.no-fx *::before, html.no-fx *::after { animation: none !important; }
+html.no-fx .th-ping, html.no-fx .th-scan, html.no-fx .hq-stream, html.no-fx .globe__ping, html.no-fx .fx5-scan { display: none; }
+
+/* Windows high-contrast mode removes background colors; keep the drawn icons visible. */
+@media (forced-colors: active) {
+  .ico, .stat__stars i { forced-color-adjust: none; background-color: CanvasText; }
+  .stat__stars i.off { opacity: .4; }
+}

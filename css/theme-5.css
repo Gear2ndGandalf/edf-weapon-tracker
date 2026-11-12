@@ -1,0 +1,36 @@
+/* EDF 5 theme: colors, fonts and animated background. Layout lives in app.css.
+   Background motion uses transform/opacity only, so the GPU handles it. */
+:root {
+  --bg: #142230; --text: #eaf2f8; --dim: #a5b8c7; --link: #8fd0e6; --focus: #8fd0e6;
+  --font: 'Rajdhani', system-ui, sans-serif; --font-mono: 'Share Tech Mono', ui-monospace, monospace; --font-stars: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols 2', 'DejaVu Sans', sans-serif;
+  --title-pad: 0 8px; --title-bg: linear-gradient(90deg, rgba(44,95,131,.92), rgba(79,136,173,.75)); --title-border: 2px solid #8ea4b6;
+  --h1-size: 28px; --h1-weight: 600; --h1-spacing: 2px; --h1-color: #ffffff;
+  --pill-bg: rgba(15,26,36,.85); --pill-border: #8ea4b6; --pill-fg: #eaf2f8;
+  --tab-bg: rgba(24,37,50,.7); --tab-fg: #eaf2f8; --tab-act: #9cc3dc; --tab-act-fg: #0b1620; --tab-border: #8ea4b6;
+  --bar: #8fd0e6; --bar-track: rgba(15,26,36,.9); --bar-act: #0b1620;
+  --btn-bg: rgba(24,37,50,.75); --btn-fg: #eaf2f8; --btn-border: #8ea4b6; --cat-bg: rgba(38,57,75,.8); --cat-fg: #eaf2f8;
+  --input-bg: rgba(15,26,36,.85); --input-fg: #ffffff; --input-border: #8ea4b6;
+  --chip-bg: rgba(24,37,50,.7); --chip-fg: #eaf2f8; --chip-act: #9cc3dc; --chip-act-fg: #0b1620; --chip-border: #8ea4b6;
+  --panel-bg: rgba(24,37,50,.62); --panel-border: #8ea4b6; --head-bg: rgba(38,57,75,.88); --head-fg: #eaf2f8; --head-check: #1b2a38; --line: rgba(142,164,182,.35);
+  --cur-bg: rgba(53,80,63,.88); --cur-fg: #ffffff; --own-fg: #eaf2f8; --dim-fg: #a5b8c7;
+  --box: #8ea4b6; --box-fill: #8fd0e6; --box-fg: #0b1620; --count: #8fd0e6;
+  --badge-bg: #e0763a; --badge-fg: #0b1620; --meter: #8fd0e6; --meter-max: #e8c35a; --meter-track: rgba(15,26,36,.9);
+  --dhead-bg: rgba(38,57,75,.88); --dhead-fg: #eaf2f8;
+  --accent-bg: #2c5f83; --accent-fg: #ffffff; --accent-border: #9cc3dc;
+  --ghost-bg: rgba(38,57,75,.8); --ghost-fg: #eaf2f8; --ghost-border: #8ea4b6;
+  --star: #8fd0e6; --star-off: #4f6f88;
+  --hover-bg: rgba(143,208,230,.12);
+  --toast-bg: #1b2a38; --toast-fg: #eaf2f8; --toast-border: #9cc3dc;
+  --nav-bg: rgba(24,37,50,.78); --nav-fg: #eaf2f8; --nav-act: #9cc3dc; --nav-act-fg: #0b1620; --nav-border: #8ea4b6;
+}
+.row.is-cur .row__edge { background-color: #e0763a; animation: thBlink 1.2s ease-in-out infinite; }
+
+@keyframes thGrid { 0% { transform: translate(0, 0); } 100% { transform: translate(48px, 48px); } }
+@keyframes thSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes thSpinR { 0% { transform: rotate(360deg); } 100% { transform: rotate(0deg); } }
+@keyframes thScan { 0% { transform: translateY(-10vh); } 100% { transform: translateY(110vh); } }
+@keyframes thBlink { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.th-grid { position: absolute; top: -48px; left: -48px; right: 0; bottom: 0; will-change: transform; background-image: linear-gradient(90deg, rgba(150,195,225,.16) 1px, transparent 1px), linear-gradient(rgba(150,195,225,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(150,195,225,.05) 1px, transparent 1px), linear-gradient(rgba(150,195,225,.05) 1px, transparent 1px); background-size: 48px 48px, 48px 48px, 12px 12px, 12px 12px; animation: thGrid 12s linear infinite; }
+.th-ring { position: absolute; border-radius: 50%; border: 6px solid rgba(180,200,215,.32); border-right-color: transparent; animation: thSpin 10s linear infinite; }
+.th-ring2 { position: absolute; border-radius: 50%; border: 3px dashed rgba(180,200,215,.28); animation: thSpinR 16s linear infinite; }
+.th-scan { position: absolute; left: 0; right: 0; top: 0; height: 70px; background-image: linear-gradient(rgba(143,208,230,0), rgba(143,208,230,.08), rgba(143,208,230,0)); animation: thScan 6s linear infinite; }
