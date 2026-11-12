@@ -2,6 +2,8 @@
 
 Track weapon and vehicle unlocks for **Earth Defense Force 4.1, 5 and 6**, per class and category, plus star upgrades for every stat in EDF 5 and 6. It also shows where each weapon drops, keeps two profiles, works offline once visited and installs as an app on phones.
 
+**[▶ Open the tracker](https://gear2ndgandalf.github.io/edf-weapon-tracker/)**: HQ, or jump straight to [EDF 4.1](https://gear2ndgandalf.github.io/edf-weapon-tracker/edf41.html) · [EDF 5](https://gear2ndgandalf.github.io/edf-weapon-tracker/edf5.html) · [EDF 6](https://gear2ndgandalf.github.io/edf-weapon-tracker/edf6.html)
+
 ## Pages
 | File | What it is |
 |---|---|
