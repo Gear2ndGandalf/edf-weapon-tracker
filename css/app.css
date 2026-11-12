@@ -320,3 +320,16 @@ a { color: var(--link); }
   html.big-text .stats { max-height: none; }
   html.big-text .nav { position: -webkit-sticky; position: sticky; bottom: 0; z-index: 5; padding-top: 8px; background-image: linear-gradient(rgba(0, 0, 0, 0), var(--bg) 55%); }
 }
+/* "Game pages: Taller lists" on HQ (class set by js/prefs.js). The same scrolling page, with
+   more room: the weapon list is nearly as tall as the screen (the header of the details panel
+   still shows below it, so the selected weapon stays in view), and upgrades and drops are shown
+   in full. Scrolling past either end of the list carries on to the page. */
+@media (max-width: 859px) {
+  html.page-scroll .shell { height: auto; min-height: 100vh; overflow: visible; }
+  html.page-scroll .main { overflow: visible; }
+  html.page-scroll .listpanel { flex: none; min-height: 0; }
+  html.page-scroll .list { height: 264px; height: max(264px, 60vh); height: max(264px, calc(100dvh - 260px)); overscroll-behavior: auto; }
+  html.page-scroll .detail { flex: none; }
+  html.page-scroll .stats { max-height: none; }
+  html.page-scroll .nav { position: -webkit-sticky; position: sticky; bottom: 0; z-index: 5; padding-top: 8px; background-image: linear-gradient(rgba(0, 0, 0, 0), var(--bg) 55%); }
+}

@@ -48,6 +48,9 @@ a { color: #e9e6df; }
 .card__body { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
 .card__top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .card__name { font-size: calc(30px * var(--ts, 1)); line-height: 1.15; }
+.card__meta { position: relative; flex: none; }
+/* The profile in use, shown above the count once a game uses more than one profile. */
+.card__slot { position: absolute; right: 0; bottom: 100%; margin-bottom: 1px; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(11px * var(--ts, 1)); letter-spacing: 1px; opacity: .85; }
 .card__count { display: inline-flex; align-items: center; gap: 5px; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(13px * var(--ts, 1)); }
 .card__sub { font-size: calc(15px * var(--ts, 1)); line-height: 1.2; }
 .card__bar { height: 6px; }
@@ -91,8 +94,20 @@ a { color: #e9e6df; }
 .setting { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .setting__label { flex: 1 1 auto; font-family: 'Oxanium', sans-serif; font-size: calc(15px * var(--ts, 1)); font-weight: 600; letter-spacing: 1px; }
 .seg { display: flex; flex-wrap: wrap; flex: 0 1 auto; gap: 4px; }
-.seg button { min-width: 48px; min-height: 44px; padding: 0 8px; background-color: transparent; color: #e9e6df; border: 1px solid #5d5f66; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(13px * var(--ts, 1)); }
-.seg button[aria-pressed="true"] { background-color: #e9e6df; color: #111215; border-color: #e9e6df; }
+.seg button, .slot, .slots__foot button { min-width: 48px; min-height: 44px; padding: 0 8px; background-color: transparent; color: #e9e6df; border: 1px solid #5d5f66; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(13px * var(--ts, 1)); }
+.seg button[aria-pressed="true"], .slot[aria-pressed="true"] { background-color: #e9e6df; color: #111215; border-color: #e9e6df; }
+
+/* Profiles: eight per game, 4 PC and 4 console save slots. Two columns on phones so a 16-character name fits. */
+.slots { display: flex; flex-direction: column; gap: 6px; }
+.slots__group { display: flex; flex-direction: column; gap: 3px; }
+.slots__label { font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(12px * var(--ts, 1)); letter-spacing: 2px; text-transform: uppercase; color: #c9c6be; }
+.slots__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.slot { min-width: 0; min-height: 48px; padding: 3px 8px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; text-align: left; }
+.slot__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot__count { font-size: calc(11px * var(--ts, 1)); opacity: .8; }
+.slot.is-empty .slot__count { opacity: .55; }
+.slots__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.slots__now { flex: 1 1 auto; min-width: 0; font-size: calc(14px * var(--ts, 1)); color: #c9c6be; overflow-wrap: anywhere; }
 
 /* Text size: Auto button, slider (60% to 150%) and the current value. */
 .seg--text { flex: 100 1 210px; flex-wrap: nowrap; align-items: center; min-width: 0; max-width: 380px; }
@@ -106,11 +121,11 @@ a { color: #e9e6df; }
 .range.is-auto::-webkit-slider-thumb { background-color: #14161a; }
 .range.is-auto::-moz-range-thumb { background-color: #14161a; }
 
-.card, .hq-btn, .nav a, .seg button { transition: filter .12s ease, transform .08s ease; }
+.card, .hq-btn, .nav a, .seg button, .slot, .slots__foot button { transition: filter .12s ease, transform .08s ease; }
 @media (hover: hover) {
-  .card:hover, .hq-btn:hover, .nav a:hover, .seg button:hover { filter: brightness(1.18); }
+  .card:hover, .hq-btn:hover, .nav a:hover, .seg button:hover, .slot:hover, .slots__foot button:hover { filter: brightness(1.18); }
 }
-.card:active, .hq-btn:active, .nav a:active, .seg button:active { filter: brightness(.85); transform: translateY(1px); }
+.card:active, .hq-btn:active, .nav a:active, .seg button:active, .slot:active, .slots__foot button:active { filter: brightness(.85); transform: translateY(1px); }
 
 .actions { margin-top: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .hq-btn { min-height: 48px; background-color: rgba(20,22,26,.85); color: #e9e6df; border: 1px solid #5d5f66; font-family: 'Oxanium', sans-serif; font-size: calc(16px * var(--ts, 1)); font-weight: 600; letter-spacing: 1px; }
@@ -140,11 +155,17 @@ a { color: #e9e6df; }
 @keyframes rhDrift { 0% { transform: translate(0, 0); } 100% { transform: translate(384px, 384px); } }
 @keyframes rhLight { 0%, 100% { opacity: 0; } 50% { opacity: .35; } }
 
+/* Room for all four save slots of a platform side by side, with the platform name in front. */
+@media (min-width: 600px) {
+  .slots__group { flex-direction: row; align-items: center; gap: 10px; }
+  .slots__label { flex: none; width: calc(76px * var(--ts, 1)); }
+  .slots__grid { flex: 1 1 auto; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 /* Shorter phone screens: the title goes on one line. */
 @media (max-height: 820px) and (max-width: 859px) {
   .hq-head h1 br { display: none; }
 }
 @media (min-width: 860px) {
   .hq-main > .cards { flex: none; max-height: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .card { min-height: 200px; }
+  .card { min-height: 200px; min-height: clamp(120px, 20vh, 200px); }
 }

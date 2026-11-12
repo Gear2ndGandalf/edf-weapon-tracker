@@ -15,7 +15,11 @@
 import * as store from './store.js';
 
 const GAME = document.body.dataset.game;
-const PROFILE = store.activeProfile(); // fixed for the life of this page; a profile switch reloads it
+// This game's profile in use (one of its eight save slots, chosen on HQ). Fixed for
+// the life of this page; a switch reloads it. (store.js from v1.4 has no per-game
+// profiles; a phone can briefly pair it with this script during an update.)
+const currentSlot = () => (store.activeSlot ? store.activeSlot(GAME) : store.activeProfile());
+const SLOT = currentSlot();
 const $ = (sel) => document.querySelector(sel);
 const BADGES = { 2: 'DLC', 3: 'MP1', 4: 'MP2' };
 const SEARCH_LIMIT = 150;
@@ -28,7 +32,7 @@ const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, Number.isInteger(n) ? n :
 let D = null;              // game data
 const all = [];            // every weapon, flat, in menu order
 const byId = new Map();
-const prog = store.loadProgress(GAME, PROFILE);
+const prog = store.loadProgress(GAME, SLOT);
 const savedUI = store.loadUI(GAME);
 const ui = Object.assign({ cls: 0, cat: 0, filter: 0, detailOpen: true, view: 'stars' }, savedUI);
 let query = '';
@@ -127,7 +131,7 @@ function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = 0;
   if (!D) return;
-  const ok = store.saveProgress(GAME, prog, summary(), PROFILE);
+  const ok = store.saveProgress(GAME, prog, summary(), SLOT);
   if (!ok && !saveWarned) {
     saveWarned = true;
     showToast('Progress cannot be saved on this device. Storage is full or blocked.');
@@ -156,7 +160,7 @@ function reloadFromStorage() {
   if (!D) return;
   clearTimeout(saveTimer);
   saveTimer = 0;
-  const fresh = store.loadProgress(GAME, PROFILE);
+  const fresh = store.loadProgress(GAME, SLOT);
   prog.owned = fresh.owned;
   prog.stars = fresh.stars;
   pruneUnknown();
@@ -166,14 +170,21 @@ function reloadFromStorage() {
 window.addEventListener('pagehide', saveNow);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
 // The profile was switched on HQ or in another tab: start over on the new profile.
-const profileChanged = () => store.activeProfile() !== PROFILE;
+const profileChanged = () => currentSlot() !== SLOT;
 window.addEventListener('pageshow', (e) => {
   if (!e.persisted) return;
   if (profileChanged()) window.location.reload(); else reloadFromStorage();
 });
 window.addEventListener('storage', (e) => {
-  if (e.key === store.PROFILE_KEY && profileChanged()) { saveNow(); window.location.reload(); return; }
-  if (e.key === null || e.key === store.progressKey(GAME, PROFILE)) reloadFromStorage();
+  // Newer progress for this page's profile comes first, so nothing below can write an older copy over it.
+  const mine = e.key === null || e.key === store.progressKey(GAME, SLOT);
+  if (mine) reloadFromStorage();
+  if (profileChanged()) {
+    if (saveTimer) saveNow(); // a change made here in the last moment, not yet written
+    window.location.reload();
+    return;
+  }
+  if (!mine && D) renderTitle(); // for example the profile was renamed on HQ
 });
 
 // ---------- Which weapons are on screen ----------
@@ -212,8 +223,8 @@ function renderTitle() {
   const s = summary();
   let html = '<span class="pill" title="Owned">' + CHECK + '<span class="sr-only">Owned </span>' + s.owned + '/' + s.total + '</span>';
   if (D.hasStars) html += '<span class="pill" title="Fully upgraded">' + STAR + '<span class="sr-only">Fully upgraded </span>' + s.maxed + '</span>';
-  // Shown only once a second profile is in use, so it is clear whose progress this is.
-  if (store.profilesInUse()) html = '<span class="pill pill--profile" title="Profile (change it on HQ)">' + esc(store.profileNames()[PROFILE]) + '</span>' + html;
+  // Shown only once this game uses more than one profile, so it is clear whose progress this is.
+  if (store.slotsInUse && store.slotsInUse(GAME)) html = '<span class="pill pill--profile" title="Profile (change it on HQ)">' + esc(store.slotNames(GAME)[SLOT]) + '</span>' + html;
   $('#pills').innerHTML = html;
 }
 
@@ -563,7 +574,7 @@ async function importLegacyNow() {
   if (!found) return;
   saveNow();
   try {
-    const n = await store.importLegacy(found.data);
+    const n = await store.importLegacy(found.data, SLOT);
     $('#banner').hidden = true;
     reloadFromStorage();
     saveNow();

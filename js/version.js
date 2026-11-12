@@ -5,10 +5,10 @@
 //   PATCH – fixes and data corrections
 // Changing this number is also what makes phones fetch the new files,
 // so bump it with every published change and add a line to CHANGELOG.md.
-self.APP_VERSION = '1.4.1';
+self.APP_VERSION = '1.5.0';
 
 // Shown once on HQ after a phone updates to this version. Keep it to a few short items.
 self.APP_NEWS = [
-  'Importing the old EDF 4.1 checklist now brings over every weapon',
-  'Text size slider (60% to 150%)',
+  'Eight profiles per game: 4 PC and 4 console save slots',
+  'Game pages: a Taller lists layout (set it on HQ)',
 ];

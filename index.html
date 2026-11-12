@@ -51,7 +51,7 @@
       <a class="card card--41" href="edf41.html">
         <div class="card__fx" aria-hidden="true"><div class="fx41-grid"></div><div class="fx41-radar"><div class="fx41-sweep"></div></div></div>
         <div class="card__body">
-          <div class="card__top"><span class="card__name">EDF 4.1</span><span class="card__count" data-count="edf41">0/827</span></div>
+          <div class="card__top"><span class="card__name">EDF 4.1</span><span class="card__meta"><span class="card__slot" data-slotname="edf41" hidden></span><span class="card__count" data-count="edf41">0/827</span></span></div>
           <div class="card__sub">The Shadow of New Despair</div>
           <div class="card__bar"><span data-bar="edf41" style="width:0%"></span></div>
         </div>
@@ -59,14 +59,14 @@
       <a class="card card--5" href="edf5.html">
         <div class="card__fx" aria-hidden="true"><div class="fx5-grid"></div><div class="fx5-ring"></div><div class="fx5-scan"></div></div>
         <div class="card__body">
-          <div class="card__top"><span class="card__name">EDF 5</span><span class="card__count" data-count="edf5">0/1187</span></div>
+          <div class="card__top"><span class="card__name">EDF 5</span><span class="card__meta"><span class="card__slot" data-slotname="edf5" hidden></span><span class="card__count" data-count="edf5">0/1187</span></span></div>
           <div class="card__bar"><span data-bar="edf5" style="width:0%"></span></div>
         </div>
       </a>
       <a class="card card--6" href="edf6.html">
         <div class="card__fx" aria-hidden="true"><div class="fx6-move"><div class="fx6-rh"></div><div class="fx6-rhl"></div></div><div class="fx6-grid"></div><div class="fx6-hazard"></div></div>
         <div class="card__body">
-          <div class="card__top"><span class="card__name">EDF 6</span><span class="card__count" data-count="edf6">0/1564</span></div>
+          <div class="card__top"><span class="card__name">EDF 6</span><span class="card__meta"><span class="card__slot" data-slotname="edf6" hidden></span><span class="card__count" data-count="edf6">0/1564</span></span></div>
           <div class="card__bar"><span data-bar="edf6" style="width:0%"></span></div>
         </div>
       </a>
@@ -74,11 +74,35 @@
 
     <section class="settings" aria-label="Settings">
       <div class="setting" role="group" aria-labelledby="lblProfile">
-        <span class="setting__label" id="lblProfile">Profile</span>
-        <div class="seg" id="segProfile">
-          <button type="button" data-profile="1">Profile 1</button>
-          <button type="button" data-profile="2">Profile 2</button>
-          <button type="button" id="renameProfile" title="Rename the selected profile">Rename</button>
+        <span class="setting__label" id="lblProfile">Profiles</span>
+        <div class="seg" id="segGame" title="Choose whose profiles to show">
+          <button type="button" data-game="edf41">EDF 4.1</button>
+          <button type="button" data-game="edf5">EDF 5</button>
+          <button type="button" data-game="edf6">EDF 6</button>
+        </div>
+      </div>
+      <div class="slots" id="segProfile">
+        <div class="slots__group" role="group" aria-labelledby="lblPc">
+          <span class="slots__label" id="lblPc">PC</span>
+          <div class="slots__grid">
+            <button type="button" class="slot" data-slot="pc1"><span class="slot__name">PC 1</span><span class="slot__count">Empty</span></button>
+            <button type="button" class="slot" data-slot="pc2"><span class="slot__name">PC 2</span><span class="slot__count">Empty</span></button>
+            <button type="button" class="slot" data-slot="pc3"><span class="slot__name">PC 3</span><span class="slot__count">Empty</span></button>
+            <button type="button" class="slot" data-slot="pc4"><span class="slot__name">PC 4</span><span class="slot__count">Empty</span></button>
+          </div>
+        </div>
+        <div class="slots__group" role="group" aria-labelledby="lblCon">
+          <span class="slots__label" id="lblCon">Console</span>
+          <div class="slots__grid">
+            <button type="button" class="slot" data-slot="con1"><span class="slot__name">Console 1</span><span class="slot__count">Empty</span></button>
+            <button type="button" class="slot" data-slot="con2"><span class="slot__name">Console 2</span><span class="slot__count">Empty</span></button>
+            <button type="button" class="slot" data-slot="con3"><span class="slot__name">Console 3</span><span class="slot__count">Empty</span></button>
+            <button type="button" class="slot" data-slot="con4"><span class="slot__name">Console 4</span><span class="slot__count">Empty</span></button>
+          </div>
+        </div>
+        <div class="slots__foot">
+          <span class="slots__now" id="slotNow"></span>
+          <button type="button" id="renameProfile" title="Rename the profile in use">Rename</button>
         </div>
       </div>
       <div class="setting" role="group" aria-labelledby="lblText">
@@ -87,6 +111,13 @@
           <button type="button" id="textAuto" data-text="auto" title="Follow this device's text size">Auto</button>
           <input type="range" class="range" id="textRange" min="60" max="150" step="5" value="100" aria-labelledby="lblText" aria-valuetext="100%">
           <span class="seg__value" id="textValue" aria-hidden="true">100%</span>
+        </div>
+      </div>
+      <div class="setting" role="group" aria-labelledby="lblLayout">
+        <span class="setting__label" id="lblLayout">Game pages</span>
+        <div class="seg" id="segLayout">
+          <button type="button" data-layout="fit" title="Everything fits on one screen; the weapon list scrolls inside it">Fit screen</button>
+          <button type="button" data-layout="scroll" title="On phones and tablets: a taller weapon list and the full details, on a page that scrolls">Taller lists</button>
         </div>
       </div>
       <div class="setting" role="group" aria-labelledby="lblFx">

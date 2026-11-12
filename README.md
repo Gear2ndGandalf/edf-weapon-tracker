@@ -1,6 +1,6 @@
 # EDF Unlock Tracker
 
-Track weapon and vehicle unlocks for **Earth Defense Force 4.1, 5 and 6**, per class and category, plus star upgrades for every stat in EDF 5 and 6. It also shows where each weapon drops, keeps two profiles, works offline once visited and installs as an app on phones.
+Track weapon and vehicle unlocks for **Earth Defense Force 4.1, 5 and 6**, per class and category, plus star upgrades for every stat in EDF 5 and 6. It also shows where each weapon drops, keeps eight profiles per game (four PC and four console save slots), works offline once visited and installs as an app on phones.
 
 **[▶ Open the tracker](https://gear2ndgandalf.github.io/edf-weapon-tracker/)**: HQ, or jump straight to [EDF 4.1](https://gear2ndgandalf.github.io/edf-weapon-tracker/edf41.html) · [EDF 5](https://gear2ndgandalf.github.io/edf-weapon-tracker/edf5.html) · [EDF 6](https://gear2ndgandalf.github.io/edf-weapon-tracker/edf6.html)
 
@@ -35,9 +35,9 @@ The site is plain HTML, CSS and JavaScript (ES modules). Nothing is compiled, an
 |---|---|
 | `js/app.js` | The game page. One script runs all three games (`<body data-game="edf5">`). Click → `act()` → `render()` → save. |
 | `js/store.js` | All saving, export and import. localStorage keys start with `edfTracker.` |
-| `js/hq.js` | HQ page: progress, display settings, export, import |
+| `js/hq.js` | HQ page: progress, profiles, display settings, export, import |
 | `js/version.js` | The app version (single source) |
-| `js/prefs.js` | Applies the HQ display settings (text size, background effects) on every page |
+| `js/prefs.js` | Applies the HQ display settings (text size, game-page layout, background effects) on every page |
 | `sw.js`, `js/sw-register.js` | Offline cache. HQ is saved on the first visit; each game is saved the first time it is opened |
 | `css/base.css` | Fonts, icons, shared helpers (every page) |
 | `css/app.css` | Layout shared by the game pages; all colors are CSS variables |

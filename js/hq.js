@@ -26,7 +26,7 @@ function showProgress() {
 function showBackup() {
   const el = $('#backup');
   const b = store.backupStatus();
-  const hasProgress = store.GAMES.some((g) => store.loadSummary(g).owned > 0);
+  const hasProgress = store.GAMES.some((g) => (store.SLOTS || [undefined]).some((slot) => store.loadSummary(g, slot).owned > 0)); // any profile
   let text = '';
   if (b.lastExport) {
     const when = new Date(b.lastExport).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
@@ -72,6 +72,7 @@ function offerLegacy() {
         try {
           const n = await store.importLegacy(found.data);
           notice('Imported ' + n + ' EDF 4.1 weapons from the old checklist.');
+          showProfiles();
           showProgress();
           showBackup();
         } catch (err) {
@@ -102,33 +103,71 @@ $('#importfile').addEventListener('change', async (e) => {
     showBackup();
   } catch (err) {
     notice(err && err.message ? err.message : 'Import failed.');
+    showProfiles(); // some profiles may already have been replaced before it failed
+    showProgress();
+    showBackup();
   }
 });
 
-// ---------- Profiles ----------
+// ---------- Profiles: eight per game, one for each save slot (4 on PC, 4 on console) ----------
+// The game buttons choose whose profiles are listed. Tapping a profile makes it
+// that game's profile in use: its progress is what the game page and its card show.
+// (During an update a phone can briefly pair this script with the previous
+// index.html or store.js, which have no per-game profiles; then this panel is left alone.)
+const slotButtons = document.querySelectorAll('#segProfile [data-slot]');
+const hasSlots = !!(store.SLOTS && slotButtons.length && $('#segGame') && $('#slotNow'));
+let shownGame = store.loadUI('hq').game;
+if (store.GAMES.indexOf(shownGame) === -1) shownGame = store.GAMES[0];
 function showProfiles() {
-  const names = store.profileNames();
-  const active = store.activeProfile();
-  document.querySelectorAll('#segProfile button[data-profile]').forEach((b) => {
-    b.textContent = names[b.dataset.profile];
-    b.setAttribute('aria-pressed', String(b.dataset.profile === active));
+  if (!store.SLOTS) return;
+  for (const g of store.GAMES) { // the profile in use, on each game card
+    const tag = document.querySelector('[data-slotname="' + g + '"]');
+    if (!tag) continue;
+    const used = store.slotsInUse(g);
+    tag.textContent = used ? store.slotNames(g)[store.activeSlot(g)] : '';
+    tag.hidden = !used;
+  }
+  if (!hasSlots) return;
+  const names = store.slotNames(shownGame);
+  const active = store.activeSlot(shownGame);
+  document.querySelectorAll('#segGame button[data-game]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.game === shownGame)));
+  slotButtons.forEach((b) => {
+    const slot = b.dataset.slot;
+    const s = store.loadSummary(shownGame, slot);
+    b.querySelector('.slot__name').textContent = names[slot];
+    b.querySelector('.slot__count').textContent = s.owned ? s.owned + '/' + s.total : 'Empty';
+    b.classList.toggle('is-empty', !s.owned);
+    b.setAttribute('aria-label', names[slot] + ', ' + (s.owned ? s.owned + ' of ' + s.total + ' owned' : 'empty'));
+    b.setAttribute('aria-pressed', String(slot === active));
+  });
+  $('#slotNow').textContent = store.GAME_NAMES[shownGame] + ' uses ' + names[active];
+}
+if (!hasSlots) { // mismatched files during an update: hide a profile list that could not work
+  ['#segProfile', '#segGame'].forEach((sel) => { if ($(sel)) $(sel).hidden = true; });
+} else {
+  $('#segGame').addEventListener('click', (e) => {
+    const b = e.target.closest ? e.target.closest('button[data-game]') : null;
+    if (!b || store.GAMES.indexOf(b.dataset.game) === -1) return;
+    shownGame = b.dataset.game;
+    store.saveUI('hq', { game: shownGame });
+    showProfiles();
+  });
+  $('#segProfile').addEventListener('click', (e) => {
+    const b = e.target.closest ? e.target.closest('button') : null;
+    if (!b) return;
+    if (b.dataset.slot) {
+      if (!store.setActiveSlot(shownGame, b.dataset.slot)) notice('Settings cannot be saved on this device. Storage is full or blocked.');
+    } else if (b.id === 'renameProfile') {
+      const active = store.activeSlot(shownGame);
+      const name = window.prompt('Name for this ' + store.GAME_NAMES[shownGame] + ' profile (up to 16 characters)', store.slotNames(shownGame)[active]);
+      if (name === null) return; // cancelled
+      if (!store.renameSlot(shownGame, active, name)) notice('The name cannot be saved on this device. Storage is full or blocked.');
+    }
+    showProfiles();
+    showProgress();
+    showBackup();
   });
 }
-$('#segProfile').addEventListener('click', (e) => {
-  const b = e.target.closest ? e.target.closest('button') : null;
-  if (!b) return;
-  if (b.dataset.profile) {
-    store.setActiveProfile(b.dataset.profile);
-  } else if (b.id === 'renameProfile') {
-    const active = store.activeProfile();
-    const name = window.prompt('Name for this profile (up to 16 characters)', store.profileNames()[active]);
-    if (name === null) return; // cancelled
-    store.renameProfile(active, name);
-  }
-  showProfiles();
-  showProgress();
-  showBackup();
-});
 
 // ---------- Display settings ----------
 // Text size: the Auto button follows the device; moving the slider picks a fixed size.
@@ -153,6 +192,7 @@ function showPrefs() {
     textValue.textContent = pct + '%';
   }
   document.querySelectorAll('#segFx button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.fx === p.fx)));
+  document.querySelectorAll('#segLayout button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === (p.layout || 'fit'))));
 }
 function changePref(key, value) {
   const p = store.loadPrefs();
@@ -164,6 +204,12 @@ function changePref(key, value) {
 if (hasTextSlider) {
   textAuto.addEventListener('click', () => changePref('text', 'auto'));
   textRange.addEventListener('input', () => changePref('text', String(Number(textRange.value) / 100)));
+}
+if ($('#segLayout')) { // not in the previous version's index.html
+  $('#segLayout').addEventListener('click', (e) => {
+    const b = e.target.closest ? e.target.closest('button[data-layout]') : null;
+    if (b) changePref('layout', b.dataset.layout);
+  });
 }
 $('#segFx').addEventListener('click', (e) => {
   const b = e.target.closest ? e.target.closest('button[data-fx]') : null;

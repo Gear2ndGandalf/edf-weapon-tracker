@@ -164,9 +164,12 @@ def run(drv, name: str) -> None:
     js(drv, "const r = document.querySelector('#textRange'); r.value = '130'; r.dispatchEvent(new Event('input', { bubbles: true }));")
     js(drv, "arguments[0].scrollIntoView({block: 'center'})", one(drv, '#segFx button[data-fx="off"]'))
     one(drv, '#segFx button[data-fx="off"]').click()
-    one(drv, '#segProfile button[data-profile="2"]').click()
-    check("0/1564" in one(drv, '[data-count="edf6"]').text, "profile 2 starts empty")
-    drv.get(BASE + "edf5.html")
+    js(drv, "arguments[0].scrollIntoView({block: 'center'})", one(drv, '#segGame button[data-game="edf6"]'))
+    one(drv, '#segGame button[data-game="edf6"]').click()
+    js(drv, "arguments[0].scrollIntoView({block: 'center'})", one(drv, '#segProfile .slot[data-slot="con1"]'))
+    one(drv, '#segProfile .slot[data-slot="con1"]').click()
+    check("0/1564" in one(drv, '[data-count="edf6"]').text, "the Console 1 profile starts empty")
+    drv.get(BASE + "edf6.html")
     wait_for(drv, ".row")
     state = js(drv, """return { ts: getComputedStyle(document.documentElement).getPropertyValue('--ts').trim(),
         size: parseFloat(getComputedStyle(document.querySelector('.row__title')).fontSize),
@@ -175,14 +178,14 @@ def run(drv, name: str) -> None:
         docW: document.documentElement.scrollWidth, winW: window.innerWidth };""")
     check(state["ts"] == "1.3" and abs(state["size"] - 22.1) < 0.3, f"130% text applies on game pages ({state['size']}px)")
     check(state["moving"] == 0, "Background effects Off stops the animations")
-    check(state["profile"].strip() == "Profile 2", "game page shows the active profile")
+    check(state["profile"].strip() == "Console 1", "game page shows the profile in use")
     check(state["docW"] <= state["winW"], "no sideways scrolling at 130% text")
     drv.get(BASE + "index.html")
     wait_for(drv, ".card")
-    for sel in ['#segText button[data-text="auto"]', '#segFx button[data-fx="on"]', '#segProfile button[data-profile="1"]']:
+    for sel in ['#segText button[data-text="auto"]', '#segFx button[data-fx="on"]', '#segGame button[data-game="edf6"]', '#segProfile .slot[data-slot="pc1"]']:
         js(drv, "arguments[0].scrollIntoView({block: 'center'})", one(drv, sel))
         one(drv, sel).click()
-    check("2/1564" in one(drv, '[data-count="edf6"]').text, "switching back restores profile 1")
+    check("2/1564" in one(drv, '[data-count="edf6"]').text, "switching back to PC 1 restores its progress")
 
     # ---- layout at phone and desktop widths
     for w, h in [(430, 900), (1280, 800)]:

@@ -1,7 +1,8 @@
 // ============================================================================
-// prefs.js – applies the two display settings before the page is drawn, so
-// there is no flash: text size (--ts and class "big-text" on <html>) and
-// background effects (class "no-fx" on <html>). Settings are changed on the HQ page.
+// prefs.js – applies the display settings before the page is drawn, so there
+// is no flash: text size (--ts and class "big-text" on <html>), background
+// effects (class "no-fx") and the game-page layout (class "page-scroll").
+// Settings are changed on the HQ page.
 // Plain script (not a module) so it runs immediately in <head>.
 // ============================================================================
 (function () {
@@ -48,6 +49,8 @@
     if (p.fx === 'off') root.classList.add('no-fx'); else root.classList.remove('no-fx');
     // Large text needs more room than one phone screen: the game pages switch to a scrolling layout.
     if (ts >= 1.3) root.classList.add('big-text'); else root.classList.remove('big-text');
+    // "Game pages: Taller lists": on phones the game pages scroll, with a taller weapon list and full details.
+    if (p.layout === 'scroll') root.classList.add('page-scroll'); else root.classList.remove('page-scroll');
   }
 
   window.EDFPrefs = { apply: apply };

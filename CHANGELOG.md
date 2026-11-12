@@ -7,6 +7,17 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.5.0 – 2026-11-12
+### Added
+- **Eight profiles per game**, one for each save slot: four for PC and four for console, so 24 in all. Each game has its own profile in use. On HQ, pick a game under Profiles, then tap a profile to use it; every profile shows its own progress and can be renamed. Game cards and game pages name the profile in use once a game uses more than one.
+- **Game pages: Taller lists** (HQ setting, for phones and tablets). The weapon list becomes nearly as tall as the screen, upgrades and drops are shown in full, and the page scrolls. Fit screen, the layout until now, stays the default.
+
+### Changed
+- The two profiles of v1.3–v1.4 carry over without any conversion: Profile 1 is PC 1 and Profile 2 is Console 1 in every game, with their names and progress. Whichever was selected stays selected.
+- Export files hold all 24 profiles and their names. Files from earlier versions still import, and v1.4 can still read the PC 1 and Console 1 parts of a new file.
+- HQ scrolls on phones now that it holds the profile list; the three game cards stay on the first screen.
+- On wide screens the HQ game cards shrink a little on short windows.
+
 ## v1.4.1 – 2026-11-12
 ### Fixed
 - **Importing the old EDF 4.1 checklist missed most weapons.** The lookup file used different category names (`assaultRifles`) from the ones the old site saves (`assault-rifles`), so only the six one-word categories matched: a complete checklist imported 161 weapons. `data/edf41-legacy.json` now uses the old site's own names, and a complete checklist imports all 812 entries as 820 of 827 weapons (each of the two "Pure Decoy Launchers" entries covers five launchers; the other 7 weapons were never on the old list).
