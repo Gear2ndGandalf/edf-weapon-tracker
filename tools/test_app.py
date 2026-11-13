@@ -319,6 +319,74 @@ async def run(browser) -> None:
     check(not back["tall"] and back["listH"] == fit["listH"] and back["docH"] <= back["winH"], "switching back to Fit screen restores the one-screen layout")
     await pg.goto(BASE + "index.html")
 
+    # ---- each game's own text: font, size and style
+    TYPE = """() => { const cs = getComputedStyle(document.querySelector('.row__title')), root = document.documentElement;
+        return { font: cs.fontFamily.split(',')[0].replace(/['"]/g, ''), size: parseFloat(cs.fontSize), ts: root.style.getPropertyValue('--ts'), italic: cs.fontStyle,
+                 caps: getComputedStyle(document.querySelector('.row__name')).textTransform, stroke: parseFloat(cs.webkitTextStrokeWidth) || 0,
+                 cls: [...root.classList].filter((c) => c.indexOf('type-') === 0).sort(), docW: root.scrollWidth, winW: innerWidth }; }"""
+    await pg.locator('#segGame button[data-game="edf5"]').click()
+    menu = await pg.evaluate("[...document.querySelector('#typeFont').options].map((o) => o.value)")
+    check(menu[0] == "default" and len(menu) == 11 and len(set(menu)) == 11 and (await pg.locator("#lblGameText").inner_text()).strip().upper() == "EDF 5 TEXT" and await pg.locator("#typeSame").get_attribute("aria-pressed") == "true",
+          f"HQ offers the game's own font plus ten others, and starts on the same size as everywhere else {menu}")
+    await pg.select_option("#typeFont", "orbitron")
+    await pg.evaluate("(v) => { const r = document.querySelector('#typeRange'); r.value = String(v); r.dispatchEvent(new Event('input', { bubbles: true })); }", 80)
+    await pg.locator('#segTypeStyle button[data-style="bold"]').click()
+    await pg.locator('#segTypeStyle button[data-style="italic"]').click()
+    await pg.locator('#segTypeStyle button[data-style="caps"]').click()
+    saved = json.loads(await pg.evaluate("localStorage.getItem('edfTracker.prefs')"))["type"]
+    sample = await pg.evaluate("(() => { const s = getComputedStyle(document.querySelector('#typePreview')); return [s.fontFamily.split(',')[0].replace(/['\"]/g, ''), Math.round(parseFloat(s.fontSize) * 10) / 10, s.fontStyle, s.textTransform]; })()")
+    check(saved["edf5"] == {"font": "orbitron", "size": "0.8", "bold": True, "italic": True, "caps": True} and saved["edf6"]["font"] == "default" and sample == ["Orbitron", 13.6, "italic", "uppercase"]
+          and await pg.evaluate("document.documentElement.style.getPropertyValue('--ts')") == "1" and not await pg.evaluate("[...document.documentElement.classList].some((c) => c.indexOf('type-') === 0)"),
+          f"font, size and style are saved for EDF 5 only; the sample line shows them and HQ itself stays as it was {sample}")
+    await pg.goto(BASE + "edf5.html")
+    await pg.wait_for_selector(".row")
+    await pg.evaluate("document.fonts.ready")
+    t5 = await pg.evaluate(TYPE)
+    check(t5["font"] == "Orbitron" and t5["ts"] == "0.8" and abs(t5["size"] - 17 * 0.8) < 0.2 and t5["italic"] == "italic" and t5["caps"] == "uppercase" and t5["stroke"] > 0 and t5["cls"] == ["type-bold", "type-caps", "type-italic"]
+          and t5["docW"] <= t5["winW"] and await pg.evaluate("document.fonts.check('500 14px Orbitron') && document.fonts.check('700 14px Orbitron')"), f"the EDF 5 page uses its own font, size and style, and the font files load {t5}")
+    await pg.goto(BASE + "edf6.html")
+    await pg.wait_for_selector(".row")
+    t6 = await pg.evaluate(TYPE)
+    check(t6["font"] == "Share Tech Mono" and t6["ts"] == "1" and t6["cls"] == [] and t6["caps"] == "none" and t6["italic"] == "normal", f"the other games keep their own look {t6}")
+    await pg.goto(BASE + "index.html")
+    await pg.locator('#segGame button[data-game="edf5"]').click()
+    check(await pg.locator("#typeFont").input_value() == "orbitron" and await pg.locator("#typeRange").input_value() == "80" and await pg.locator('#segTypeStyle button[aria-pressed="true"]').count() == 3, "HQ shows the saved text settings again")
+    await pg.evaluate(SET_TEXT, 110)
+    kept = json.loads(await pg.evaluate("localStorage.getItem('edfTracker.prefs')"))
+    check(kept["text"] == "1.1" and kept["type"]["edf5"] == {"font": "orbitron", "size": "0.8", "bold": True, "italic": True, "caps": True} and await pg.locator("#typeRange").input_value() == "80",
+          "changing the Text size for all pages leaves a game's own text settings alone")
+    await pg.locator("#typeSame").click()
+    await pg.select_option("#typeFont", "default")
+    for style in ("bold", "italic", "caps"):
+        await pg.locator(f'#segTypeStyle button[data-style="{style}"]').click()
+    await pg.evaluate(SET_TEXT, 120)
+    check((await pg.locator("#typeValue").inner_text()).strip() == "120%" and await pg.locator("#typeRange").input_value() == "120" and json.loads(await pg.evaluate("localStorage.getItem('edfTracker.prefs')"))["type"]["edf5"] == {"font": "default", "size": "same", "bold": False, "italic": False, "caps": False},
+          "Same follows the Text size for all pages, and every text setting can be put back")
+    await pg.goto(BASE + "edf5.html")
+    await pg.wait_for_selector(".row")
+    t5 = await pg.evaluate(TYPE)
+    check(t5["font"] == "Rajdhani" and t5["ts"] == "1.2" and t5["cls"] == [], f"back on the game's own font, at the size set for all pages {t5}")
+    await pg.goto(BASE + "index.html")
+    await pg.locator("#textAuto").click()
+    # damaged or hand-edited settings never stop a page from loading; a game's own large size also gets the scrolling layout
+    cbad = await browser.new_context(viewport=PHONE)
+    pbad = await cbad.new_page()
+    await watch(pbad, errors, external)
+    await pbad.add_init_script("""localStorage.setItem('edfTracker.prefs', JSON.stringify({ text: '1', type: { edf5: 'x', edf6: { font: 5, size: 'huge', bold: 'yes', caps: 1 }, edf41: { font: '__proto__', size: '1.4', italic: true }, edf9: { font: 'orbitron' } } }))""")
+    odd = {}
+    for g in ("edf5", "edf6", "edf41"):
+        await pbad.goto(BASE + g + ".html")
+        await pbad.wait_for_selector(".row")
+        odd[g] = await pbad.evaluate(TYPE)
+        odd[g]["big"] = await pbad.evaluate("document.documentElement.classList.contains('big-text')")
+    check(odd["edf5"]["font"] == "Rajdhani" and odd["edf5"]["cls"] == [] and odd["edf6"]["font"] == "Share Tech Mono" and odd["edf6"]["ts"] == "1" and odd["edf6"]["cls"] == []
+          and odd["edf41"]["font"] == "Saira Condensed" and odd["edf41"]["ts"] == "1.4" and odd["edf41"]["cls"] == ["type-italic"] and odd["edf41"]["big"] and not odd["edf5"]["big"],
+          f"damaged text settings fall back safely, and a game's own size of 130% or more switches that game to the scrolling layout {odd}")
+    await pbad.goto(BASE + "index.html")
+    await pbad.locator('#segGame button[data-game="edf6"]').click()
+    check(await pbad.locator("#typeFont").input_value() == "default" and await pbad.locator('#segTypeStyle button[aria-pressed="true"]').count() == 0 and await pbad.locator("#typeSame").get_attribute("aria-pressed") == "true", "HQ shows damaged text settings as the defaults")
+    await cbad.close()
+
     # ---- profiles: eight per game (4 PC + 4 console save slots), each game with its own
     SLOT_STATE = """(g) => ({ pressed: [...document.querySelectorAll('#segProfile .slot[aria-pressed=true]')].map((b) => b.dataset.slot),
         game: [...document.querySelectorAll('#segGame button[aria-pressed=true]')].map((b) => b.dataset.game),
@@ -584,24 +652,44 @@ async def run(browser) -> None:
     check(gap >= -0.5, f"at 60% text the star meter does not run into the level ({gap:.1f}px apart)")
     await c.close()
 
+    # ---- a page that cannot fit one screen scrolls instead of clipping the details header (very narrow phones, wide fonts)
+    for (w, h), type_prefs, expect in (((280, 653), {}, True), ((402, 874), {}, False), ((320, 568), {"edf5": {"font": "orbitron", "bold": True, "caps": True}}, None)):
+        c = await browser.new_context(viewport={"width": w, "height": h})
+        p = await c.new_page()
+        await p.add_init_script("localStorage.setItem('edfTracker.prefs', JSON.stringify({text: '1', fx: 'on', type: %s}))" % json.dumps(type_prefs))
+        await p.goto(BASE + "edf5.html")
+        await p.wait_for_selector(".row")
+        await p.evaluate("document.fonts.ready")
+        await p.wait_for_timeout(100)
+        r = await p.evaluate("""() => { const d = document.querySelector('.detail'), hd = document.querySelector('.detail__head');
+            return { noFit: document.documentElement.classList.contains('no-fit'), headWhole: hd.getBoundingClientRect().bottom <= d.getBoundingClientRect().bottom + 1, scrolls: document.documentElement.scrollHeight > innerHeight }; }""")
+        check(r["headWhole"] and (expect is None or (r["noFit"] == expect and r["scrolls"] == expect)), f"EDF 5 at {w}x{h}{' in a wide font' if type_prefs else ''}: the details header is whole ({'scrolling' if r['noFit'] else 'one screen'}) {r}")
+        await c.close()
+
     # ---- layout at every size
-    for page_name, text, layout in [(n, t, l) for t, l in (("0.6", "fit"), ("1", "fit"), ("1.5", "fit"), ("1", "scroll")) for n in ("edf41", "edf5", "edf6", "index")]:
+    WIDE = {g: {"font": "orbitron", "size": "same", "bold": True, "italic": False, "caps": True} for g in ("edf41", "edf5", "edf6")}  # the widest font, bold, in capitals
+    for page_name, text, layout, wide in [(n, t, l, w) for t, l, w in (("0.6", "fit", False), ("1", "fit", False), ("1.5", "fit", False), ("1", "scroll", False), ("1", "fit", True), ("1.5", "fit", True)) for n in ("edf41", "edf5", "edf6", "index")]:
+        if wide and page_name == "index":
+            continue
         bad = []
-        tall_note = ", Taller lists" if layout == "scroll" else ""
+        tall_note = (", Taller lists" if layout == "scroll" else "") + (", Orbitron bold capitals" if wide else "")
         for w, h in SIZES:
             c = await browser.new_context(viewport={"width": w, "height": h})
             p = await c.new_page()
-            await p.add_init_script("localStorage.setItem('edfTracker.prefs', JSON.stringify({text: '%s', fx: 'on', layout: '%s'}))" % (text, layout))
+            await p.add_init_script("localStorage.setItem('edfTracker.prefs', JSON.stringify({text: '%s', fx: 'on', layout: '%s', type: %s}))" % (text, layout, json.dumps(WIDE if wide else {})))
             await p.goto(BASE + page_name + ".html")
             if page_name != "index":
                 await p.wait_for_selector(".row")
+            await p.evaluate("document.fonts.ready")  # measure in the real font, not the fallback shown while it loads
             # When the page scrolls, the game bar floats over it; measure at the end of the page.
             r = await p.evaluate("""() => { window.scrollTo(0, document.documentElement.scrollHeight);
                 const nav = document.querySelector('nav').getBoundingClientRect();
                 const d = document.querySelector('.detail'), l = document.querySelector('.list');
-                const off = [...document.querySelectorAll('button, a')].filter((e) => { const b = e.getBoundingClientRect(); return b.width && (b.right > innerWidth + 0.5 || b.left < -0.5); }).length;
+                const off = [...document.querySelectorAll('button, a, .pill, h1')].filter((e) => { const b = e.getBoundingClientRect(); return b.width && (b.right > innerWidth + 0.5 || b.left < -0.5); }).length;
                 const nm = document.querySelector('.detail__name');
-                const cut = d && nm ? (nm.getBoundingClientRect().height < 10 || nm.getBoundingClientRect().bottom > d.getBoundingClientRect().bottom + 0.5 || nm.getBoundingClientRect().top < d.getBoundingClientRect().top - 0.5) : false;
+                const hd = document.querySelector('.detail__head');
+                const cut = d && nm ? (nm.getBoundingClientRect().height < 10 || nm.getBoundingClientRect().bottom > d.getBoundingClientRect().bottom + 0.5 || nm.getBoundingClientRect().top < d.getBoundingClientRect().top - 0.5
+                    || (hd && hd.getBoundingClientRect().bottom > d.getBoundingClientRect().bottom + 1)) : false;  // the name, and the whole header with its buttons
                 return { docW: document.documentElement.scrollWidth, overlap: d ? d.getBoundingClientRect().bottom > nav.top + 0.5 : false, listH: l ? l.getBoundingClientRect().height : 999, off, cut }; }""")
             if r["docW"] > w or r["overlap"] or r["off"] or r["cut"] or r["listH"] < 130:
                 bad.append((w, h, r))
@@ -626,6 +714,21 @@ async def run(browser) -> None:
     await p5.goto(BASE + "edf41.html")  # very first visit lands on a game page
     await p5.wait_for_selector(".row")
     await p5.wait_for_function("navigator.serviceWorker.ready.then(() => true)")
+    c12 = await browser.new_context(viewport=PHONE)
+    p12 = await c12.new_page()
+    await p12.add_init_script("localStorage.setItem('edfTracker.prefs', JSON.stringify({ type: { edf6: { font: 'tektur' } } }))")
+    await p12.goto(BASE + "edf6.html")  # first visit, with a font picked for this game
+    await p12.wait_for_selector(".row")
+    await p12.wait_for_function("navigator.serviceWorker.ready.then(() => true)")
+    c13 = await browser.new_context(viewport=PHONE)
+    p13 = await c13.new_page()
+    await p13.goto(BASE + "index.html")
+    await p13.wait_for_function("navigator.serviceWorker.controller !== null")
+    await p13.goto(BASE + "edf41.html")  # the game is saved for offline use with its own font
+    await p13.wait_for_selector(".row")
+    await p13.goto(BASE + "index.html")
+    await p13.locator('#segGame button[data-game="edf41"]').click()
+    await p13.select_option("#typeFont", "jura")  # picked on HQ; the game page is not opened again before going offline
     await p4.wait_for_timeout(2000)
     SERVER.terminate()
     SERVER.wait()
@@ -640,6 +743,12 @@ async def run(browser) -> None:
     await p5.reload()
     await p5.wait_for_selector(".row", timeout=5000)
     check(await p5.locator(".row").count() == 30, "landing directly on a game page also saves it for offline use")
+    await p12.reload()
+    await p12.wait_for_selector(".row", timeout=5000)
+    check(await p12.evaluate("document.fonts.ready.then(() => document.fonts.check('500 17px Tektur') && document.fonts.check('600 17px Tektur') && /^['\"]?Tektur/.test(getComputedStyle(document.querySelector('.row__title')).fontFamily))"), "a font picked for a game is kept for offline use with it, in both weights")
+    await p13.goto(BASE + "edf41.html")
+    await p13.wait_for_selector(".row", timeout=5000)
+    check(await p13.evaluate("document.fonts.ready.then(() => document.fonts.check('500 17px Jura') && document.fonts.check('700 17px Jura') && /^['\"]?Jura/.test(getComputedStyle(document.querySelector('.row__title')).fontFamily))"), "a font picked on HQ is ready on a game page that is next opened offline")
 
 
 async def main() -> None:

@@ -37,7 +37,7 @@ The site is plain HTML, CSS and JavaScript (ES modules). Nothing is compiled, an
 | `js/store.js` | All saving, export and import. localStorage keys start with `edfTracker.` |
 | `js/hq.js` | HQ page: progress, profiles, display settings, export, import |
 | `js/version.js` | The app version (single source) |
-| `js/prefs.js` | Applies the HQ display settings (text size, game-page layout, background effects) on every page |
+| `js/prefs.js` | Applies the HQ display settings on every page: text size, game-page layout, background effects, and each game's own font, size and style. Holds the list of fonts a game can use |
 | `sw.js`, `js/sw-register.js` | Offline cache. HQ is saved on the first visit; each game is saved the first time it is opened |
 | `css/base.css` | Fonts, icons, shared helpers (every page) |
 | `css/app.css` | Layout shared by the game pages; all colors are CSS variables |

@@ -7,6 +7,20 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.6.0 – 2026-11-12
+### Added
+- **Each game's own text**, set on HQ under the game's profiles: a font, a size and a style (Bold, Italic, Caps), with a line of sample text. Size starts on Same, which follows the Text size for all pages; the slider gives that game its own size from 60% to 150%.
+- **Six more fonts** to pick from, all under the SIL Open Font License (texts in `fonts/licenses`): Orbitron, Exo 2, Chakra Petch, Tektur, Quantico and Jura. Each game's own font and the three other fonts the app already had (Oxanium, Rajdhani, Saira Condensed, Share Tech Mono) are in the list too. A font is only downloaded once a page uses it, and it is kept for offline use with that game.
+
+### Fixed
+- On very narrow phones (about 280px wide) the header of the details panel, with its Max and Clear buttons, was partly cut off. A game page that cannot fit one screen now switches to the scrolling layout by itself, which also covers wide fonts and capitals.
+
+### Changed
+- The Text size setting is unchanged, and now also stands for every game set to Same.
+- On a game page, the Owned and star counters move below the title when a wide font leaves no room beside it.
+- The two Chakra Petch files had an invalid header field that Firefox would warn about; it is corrected, with the letter shapes untouched.
+- Game pages also apply their settings when opened without `.html` in the address.
+
 ## v1.5.0 – 2026-11-12
 ### Added
 - **Eight profiles per game**, one for each save slot: four for PC and four for console, so 24 in all. Each game has its own profile in use. On HQ, pick a game under Profiles, then tap a profile to use it; every profile shows its own progress and can be renamed. Game cards and game pages name the profile in use once a game uses more than one.

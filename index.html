@@ -105,8 +105,32 @@
           <button type="button" id="renameProfile" title="Rename the profile in use">Rename</button>
         </div>
       </div>
+      <div class="gtext" id="gameText" role="group" aria-labelledby="lblGameText">
+        <span class="slots__label" id="lblGameText">Text</span>
+        <div class="setting">
+          <label class="setting__label setting__label--sub" for="typeFont">Font</label>
+          <select class="select" id="typeFont"><option value="default">Game default</option></select>
+        </div>
+        <div class="setting" role="group" aria-labelledby="lblTypeSize">
+          <span class="setting__label setting__label--sub" id="lblTypeSize">Size</span>
+          <div class="seg seg--text" id="segTypeSize">
+            <button type="button" id="typeSame" title="Use the Text size set below for every page">Same</button>
+            <input type="range" class="range" id="typeRange" min="60" max="150" step="5" value="100" aria-labelledby="lblTypeSize" aria-valuetext="100%">
+            <span class="seg__value" id="typeValue" aria-hidden="true">100%</span>
+          </div>
+        </div>
+        <div class="setting" role="group" aria-labelledby="lblTypeStyle">
+          <span class="setting__label setting__label--sub" id="lblTypeStyle">Style</span>
+          <div class="seg" id="segTypeStyle">
+            <button type="button" data-style="bold">Bold</button>
+            <button type="button" data-style="italic">Italic</button>
+            <button type="button" data-style="caps">Caps</button>
+          </div>
+        </div>
+        <p class="gtext__preview" id="typePreview" aria-hidden="true"></p>
+      </div>
       <div class="setting" role="group" aria-labelledby="lblText">
-        <span class="setting__label" id="lblText">Text size</span>
+        <span class="setting__label" id="lblText" title="For HQ and for every game set to Same">Text size</span>
         <div class="seg seg--text" id="segText">
           <button type="button" id="textAuto" data-text="auto" title="Follow this device's text size">Auto</button>
           <input type="range" class="range" id="textRange" min="60" max="150" step="5" value="100" aria-labelledby="lblText" aria-valuetext="100%">

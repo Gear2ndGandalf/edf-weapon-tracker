@@ -20,6 +20,15 @@ button:disabled { cursor: default; opacity: .45; }
 a { color: var(--link); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+/* A game's own text style, chosen on HQ (classes set by js/prefs.js). Buttons do not take
+   text-transform from the page, so they are named; what is typed into the search box stays as
+   typed. Bold is drawn as a thin outline in the text colour, which works the same for every
+   font, including those with a single weight. */
+html.type-italic body { font-style: italic; }
+html.type-italic .titlebar h1 { padding-right: .14em; } /* room for the slant of the last letter */
+html.type-caps body, html.type-caps button, html.type-caps .search input::placeholder { text-transform: uppercase; }
+html.type-bold body { -webkit-text-stroke: 0.022em currentColor; }
+
 /* ---------- App shell: fills the screen, only the list scrolls ---------- */
 .shell {
   position: relative;
@@ -41,19 +50,20 @@ a { color: var(--link); }
 /* ---------- Title bar ---------- */
 .titlebar {
   position: relative; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; /* the counters drop below a title too wide to sit beside */
   min-height: 48px;
   padding: var(--title-pad, 0 8px);
   background: var(--title-bg, transparent);
   border: var(--title-border, 0);
 }
 .titlebar h1 {
+  min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   margin: 0; white-space: nowrap; line-height: 1;
   font-family: var(--title-font, inherit);
   font-size: calc(var(--h1-size, 28px) * var(--ts, 1)); font-weight: var(--h1-weight, 600);
   letter-spacing: var(--h1-spacing, 1px); color: var(--h1-color, #fff);
 }
-.pills { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; font-family: var(--font-mono); font-size: calc(13px * var(--ts, 1)); }
+.pills { flex: 1 1 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; font-family: var(--font-mono); font-size: calc(13px * var(--ts, 1)); }
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background-color: var(--pill-bg); border: 1px solid var(--pill-border); color: var(--pill-fg); }
 .pill--profile { max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 
@@ -301,7 +311,8 @@ a { color: var(--link); }
   .stat__btn { height: 36px; min-height: 36px; }
 }
 /* Short screens (small phones, phones held sideways): the page scrolls instead of squeezing.
-   The same rules apply when the text size is 130% or more (class set by js/prefs.js). */
+   The same rules apply when the text size is 130% or more (class "big-text", set by js/prefs.js)
+   and when the page finds that it does not fit (class "no-fit", set by js/app.js). */
 @media (max-height: 620px) and (max-width: 859px) {
   .shell { height: auto; min-height: 100vh; overflow: visible; }
   .main { overflow: visible; }
@@ -312,13 +323,13 @@ a { color: var(--link); }
   .nav { position: -webkit-sticky; position: sticky; bottom: 0; z-index: 5; padding-top: 8px; background-image: linear-gradient(rgba(0, 0, 0, 0), var(--bg) 55%); }
 }
 @media (max-width: 859px) {
-  html.big-text .shell { height: auto; min-height: 100vh; overflow: visible; }
-  html.big-text .main { overflow: visible; }
-  html.big-text .listpanel { flex: none; min-height: 0; }
-  html.big-text .list { height: 264px; height: max(264px, 60vh); }
-  html.big-text .detail { flex: none; }
-  html.big-text .stats { max-height: none; }
-  html.big-text .nav { position: -webkit-sticky; position: sticky; bottom: 0; z-index: 5; padding-top: 8px; background-image: linear-gradient(rgba(0, 0, 0, 0), var(--bg) 55%); }
+  html.big-text .shell, html.no-fit .shell { height: auto; min-height: 100vh; overflow: visible; }
+  html.big-text .main, html.no-fit .main { overflow: visible; }
+  html.big-text .listpanel, html.no-fit .listpanel { flex: none; min-height: 0; }
+  html.big-text .list, html.no-fit .list { height: 264px; height: max(264px, 60vh); }
+  html.big-text .detail, html.no-fit .detail { flex: none; }
+  html.big-text .stats, html.no-fit .stats { max-height: none; }
+  html.big-text .nav, html.no-fit .nav { position: -webkit-sticky; position: sticky; bottom: 0; z-index: 5; padding-top: 8px; background-image: linear-gradient(rgba(0, 0, 0, 0), var(--bg) 55%); }
 }
 /* "Game pages: Taller lists" on HQ (class set by js/prefs.js). The same scrolling page, with
    more room: the weapon list is nearly as tall as the screen (the header of the details panel

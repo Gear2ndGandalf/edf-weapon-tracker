@@ -20,7 +20,7 @@ const CORE = [
   'img/rh-base.svg', 'img/rh-light.svg',
   'fonts/oxanium-latin-600-normal.woff2', 'fonts/oxanium-latin-700-normal.woff2',
   'fonts/rajdhani-latin-500-normal.woff2', 'fonts/rajdhani-latin-600-normal.woff2',
-  'fonts/saira-condensed-latin-700-normal.woff2', 'fonts/share-tech-mono-latin-400-normal.woff2',
+  'fonts/saira-condensed-latin-500-normal.woff2', 'fonts/saira-condensed-latin-700-normal.woff2', 'fonts/share-tech-mono-latin-400-normal.woff2',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
 ];
 const SHARED_GAME = ['css/app.css', 'js/app.js'];
@@ -42,15 +42,21 @@ const OFFLINE_PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"
 // starts out with a stale copy of a file.
 const fresh = (url) => new Request(url, { cache: 'reload' });
 
-// Save one game's files, skipping anything already cached.
-function keepOffline(game) {
-  const files = GAMES[game];
-  if (!files) return Promise.resolve();
+// Save files, skipping anything already cached.
+function keep(urls) {
   return caches.open(CACHE).then((cache) =>
-    Promise.all(SHARED_GAME.concat(files).map((url) =>
+    Promise.all(urls.map((url) =>
       cache.match(url).then((hit) => hit || cache.add(fresh(url)).catch(() => { /* retried on the next visit */ }))
     ))
   );
+}
+// The files of a font the player picked for a game. Only plain names in fonts/ are accepted.
+const fontFiles = (fonts) => (Array.isArray(fonts) ? fonts : []).filter((f) => typeof f === 'string' && /^fonts\/[a-z0-9-]+\.woff2$/.test(f)).slice(0, 6);
+// Save one game's files, with the font picked for it, if any.
+function keepOffline(game, fonts) {
+  const files = GAMES[game];
+  if (!files) return Promise.resolve();
+  return keep(SHARED_GAME.concat(files, fontFiles(fonts)));
 }
 function gameOf(url) {
   const m = /\/(edf41|edf5|edf6)\.html$/.exec(new URL(url).pathname);
@@ -74,7 +80,8 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   const msg = event.data;
-  if (msg && msg.type === 'keep-offline') event.waitUntil(keepOffline(msg.game));
+  if (msg && msg.type === 'keep-offline') event.waitUntil(keepOffline(msg.game, msg.fonts));
+  if (msg && msg.type === 'keep-fonts') event.waitUntil(keep(fontFiles(msg.fonts))); // HQ: a font was just picked for a game
 });
 
 self.addEventListener('fetch', (event) => {

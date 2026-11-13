@@ -217,7 +217,29 @@ function render() {
   renderList(rows);
   renderDetail();
   restoreFocus(focus);
+  checkFit();
 }
+
+// ---------- Fit check ----------
+// On phones the page normally fits one screen. When the header of the details panel no longer
+// fits (a very narrow screen, or a wide font or capitals picked on HQ), the page switches to the
+// scrolling layout (class "no-fit", same rules as large text) instead of clipping it. Checked
+// after every redraw and once the fonts have loaded. It is only reconsidered when the screen
+// width changes: mobile browsers change the height while a page scrolls.
+let fitWidth = window.innerWidth;
+function checkFit() {
+  const root = document.documentElement;
+  if (root.classList.contains('no-fit') || window.innerWidth >= 860) return;
+  const detail = $('#detail');
+  const head = detail.querySelector('.detail__head');
+  if (head && detail.clientHeight + 1 < head.offsetHeight) root.classList.add('no-fit');
+}
+window.addEventListener('resize', () => {
+  if (window.innerWidth === fitWidth) return;
+  fitWidth = window.innerWidth;
+  document.documentElement.classList.remove('no-fit');
+  if (D) checkFit();
+});
 
 function renderTitle() {
   const s = summary();
@@ -624,6 +646,7 @@ async function boot() {
   if (Number.isFinite(savedUI.scroll) && savedUI.scroll > 0) scrollMem.set(catKey(), savedUI.scroll);
   render();
   restoreScroll();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(checkFit); // a font that arrives late can be wider
   checkLegacy();
   const v = store.checkVersion();
   if (v.updated) showToast('Updated to v' + v.to);

@@ -15,7 +15,8 @@
 //   edfTracker.ui.<game>       { cls, cat, filter, detailOpen, scroll }   (ui.hq: { game })
 //   edfTracker.lastExport / edfTracker.lastChange   ISO dates, for the backup line on HQ
 //   edfTracker.prefs           { text: 'auto' | '0.6' ... '1.5' (a scale, set with the HQ slider), fx: 'on' | 'off',
-//                                layout: 'fit' | 'scroll' (game pages: fit one screen, or taller lists on a scrolling page) }
+//                                layout: 'fit' | 'scroll' (game pages: fit one screen, or taller lists on a scrolling page),
+//                                type: { <game>: { font: id from js/prefs.js, size: 'same' | '0.6' ... '1.5', bold, italic, caps } } }
 //
 // Export file format: { app: "edf-unlock-tracker", version: 1, appVersion, exportedAt,
 //   games: { <game>: {...} },                 PC 1 of each game
@@ -207,12 +208,27 @@ function cleanText(v) {
   if (!(n > 0)) return 'auto';
   return String(Math.round(Math.min(TEXT_MAX, Math.max(TEXT_MIN, n)) * 100) / 100);
 }
+// Each game's own text settings; anything missing or malformed falls back to "same as everywhere else".
+function cleanType(v) {
+  const out = {};
+  for (const g of GAMES) {
+    const t = isObject(v) && isObject(v[g]) ? v[g] : {};
+    const size = cleanText(t.size);
+    out[g] = {
+      font: typeof t.font === 'string' && /^[a-z0-9]{1,16}$/.test(t.font) ? t.font : 'default',
+      size: size === 'auto' ? 'same' : size,
+      bold: t.bold === true, italic: t.italic === true, caps: t.caps === true,
+    };
+  }
+  return out;
+}
 export function loadPrefs() {
   const p = readJSON(P + 'prefs', {});
   return {
     text: isObject(p) ? cleanText(p.text) : 'auto',
     fx: isObject(p) && p.fx === 'off' ? 'off' : 'on',
     layout: isObject(p) && p.layout === 'scroll' ? 'scroll' : 'fit',
+    type: cleanType(isObject(p) ? p.type : null),
   };
 }
 export function savePrefs(prefs) { return writeJSON(P + 'prefs', prefs); }

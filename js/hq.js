@@ -151,6 +151,7 @@ if (!hasSlots) { // mismatched files during an update: hide a profile list that 
     shownGame = b.dataset.game;
     store.saveUI('hq', { game: shownGame });
     showProfiles();
+    showGameText();
   });
   $('#segProfile').addEventListener('click', (e) => {
     const b = e.target.closest ? e.target.closest('button') : null;
@@ -166,6 +167,70 @@ if (!hasSlots) { // mismatched files during an update: hide a profile list that 
     showProfiles();
     showProgress();
     showBackup();
+  });
+}
+
+// ---------- A game's own text: font, size and style ----------
+// These follow the game chosen under Profiles. The font list comes from js/prefs.js,
+// which also applies the settings on the game pages. (Left alone when this script is
+// paired with a previous index.html, store.js or prefs.js during an update.)
+const FONTS = (window.EDFPrefs && window.EDFPrefs.FONTS) || [];
+const OWN_FONT = { edf41: "'Saira Condensed'", edf5: "'Rajdhani'", edf6: "'Share Tech Mono'" }; // each theme's own font, for the sample
+const SAMPLE = { edf41: 'AF14-ST · Fusion Blaster · Lv 2', edf5: 'PA-11 SLS · Slugger NN1 · Lv 5', edf6: 'MR98 Fang · Blazer · Lv 12' };
+const typeFont = $('#typeFont');
+const typeRange = $('#typeRange');
+const hasGameText = !!(FONTS.length && typeFont && typeRange && $('#typeSame') && $('#typeValue') && $('#segTypeStyle') && $('#typePreview') && store.loadPrefs().type);
+function globalScale() { // the size "Same" stands for: the Text size setting, or the device's size when that is Auto
+  const t = store.loadPrefs().text;
+  return t === 'auto' ? (parseFloat(document.documentElement.style.getPropertyValue('--ts')) || 1) : parseFloat(t);
+}
+function showGameText() {
+  if (!hasGameText) return;
+  const t = store.loadPrefs().type[shownGame];
+  const font = FONTS.filter((f) => f[0] === t.font)[0] || FONTS[0];
+  const same = t.size === 'same';
+  const scale = same ? globalScale() : parseFloat(t.size);
+  const pct = Math.round(scale * 100);
+  $('#lblGameText').textContent = store.GAME_NAMES[shownGame] + ' text';
+  typeFont.value = font[0];
+  $('#typeSame').setAttribute('aria-pressed', String(same));
+  typeRange.classList.toggle('is-auto', same);
+  if (Number(typeRange.value) !== pct) typeRange.value = String(pct);
+  typeRange.setAttribute('aria-valuetext', pct + '%' + (same ? ', same as Text size' : ''));
+  $('#typeValue').textContent = pct + '%';
+  document.querySelectorAll('#segTypeStyle button[data-style]').forEach((b) => b.setAttribute('aria-pressed', String(t[b.dataset.style] === true)));
+  const sample = $('#typePreview');
+  sample.textContent = SAMPLE[shownGame];
+  sample.style.fontFamily = (font[2] || OWN_FONT[shownGame]) + ', system-ui, sans-serif';
+  sample.style.fontSize = 'calc(17px * ' + scale + ')';
+  sample.style.fontStyle = t.italic ? 'italic' : 'normal';
+  sample.style.textTransform = t.caps ? 'uppercase' : 'none';
+  sample.style.webkitTextStroke = t.bold ? '0.022em currentColor' : '0';
+}
+function changeGameText(key, value) {
+  const p = store.loadPrefs();
+  p.type[shownGame][key] = value;
+  if (!store.savePrefs(p)) notice('Settings cannot be saved on this device. Storage is full or blocked.');
+  showGameText();
+  // Keep every file of a newly picked font, so the game page has it even if it is next opened offline.
+  const worker = key === 'font' && navigator.serviceWorker ? navigator.serviceWorker.controller : null;
+  if (worker && window.EDFPrefs.fontFiles) worker.postMessage({ type: 'keep-fonts', fonts: window.EDFPrefs.fontFiles(shownGame) });
+}
+if (!hasGameText) {
+  if ($('#gameText')) $('#gameText').hidden = true;
+} else {
+  FONTS.forEach((f, i) => { // the first option is already in the page
+    const o = i === 0 ? typeFont.options[0] : document.createElement('option');
+    o.value = f[0];
+    o.textContent = f[1];
+    if (i > 0) typeFont.appendChild(o);
+  });
+  typeFont.addEventListener('change', () => changeGameText('font', typeFont.value));
+  $('#typeSame').addEventListener('click', () => changeGameText('size', 'same'));
+  typeRange.addEventListener('input', () => changeGameText('size', String(Number(typeRange.value) / 100)));
+  $('#segTypeStyle').addEventListener('click', (e) => {
+    const b = e.target.closest ? e.target.closest('button[data-style]') : null;
+    if (b) changeGameText(b.dataset.style, b.getAttribute('aria-pressed') !== 'true');
   });
 }
 
@@ -193,6 +258,7 @@ function showPrefs() {
   }
   document.querySelectorAll('#segFx button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.fx === p.fx)));
   document.querySelectorAll('#segLayout button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === (p.layout || 'fit'))));
+  showGameText(); // "Same" follows the Text size above
 }
 function changePref(key, value) {
   const p = store.loadPrefs();
@@ -226,7 +292,7 @@ window.addEventListener('edf-update', () => {
 
 // Progress may change in another tab or after returning from a game page.
 window.addEventListener('pageshow', () => { showProfiles(); showProgress(); showPrefs(); showBackup(); });
-window.addEventListener('storage', () => { showProfiles(); showProgress(); showPrefs(); showBackup(); if (window.EDFPrefs) window.EDFPrefs.apply(); });
+window.addEventListener('storage', () => { if (window.EDFPrefs) window.EDFPrefs.apply(); showProfiles(); showProgress(); showPrefs(); showBackup(); });
 showProfiles();
 showProgress();
 showPrefs();
