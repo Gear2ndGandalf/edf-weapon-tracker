@@ -314,18 +314,41 @@ async def run(browser) -> None:
     check(version.startswith("v") and version.count(".") == 2 and exp.get("appVersion") == version[1:], f"version {version} shows on HQ and is written to exports")
 
     # ---- update notices
-    await pg.evaluate("localStorage.setItem('edfTracker.seenVersion', '0.9.0')")
+    # the count of fully upgraded weapons is made again after an update (an older version may have counted with other star maximums)
+    def fully_upgraded(g, stored):
+        data = json.loads((ROOT / "data" / f"{g}.json").read_text(encoding="utf-8"))
+        return sum(1 for c in data["classes"] for k in c["cats"] for it in k["items"] if len(it) > 4 and it[4] and it[0] in stored["owned"]
+                   and all((stored["stars"].get(it[0], []) + [0] * 9)[i] >= m for i, (_, m) in enumerate(it[4])))
+    real = {g: fully_upgraded(g, json.loads(await pg.evaluate("(g) => localStorage.getItem('edfTracker.' + g) || '{\"owned\":[],\"stars\":{}}'", g))) for g in ("edf5", "edf6")}
+    await pg.evaluate("""() => { ['edf5', 'edf6'].forEach((g) => { const s = JSON.parse(localStorage.getItem('edfTracker.summary.' + g) || '{}');
+        s.maxed = 7; localStorage.setItem('edfTracker.summary.' + g, JSON.stringify(s)); });
+        localStorage.setItem('edfTracker.seenVersion', '0.9.0'); }""")
     await pg.reload()
     check("Updated to " + version in await pg.locator("#notice").inner_text(), "HQ announces an update once")
+    await pg.wait_for_timeout(700)
+    recounted = {g: json.loads(await pg.evaluate("(g) => localStorage.getItem('edfTracker.summary.' + g)", g)).get("maxed") for g in ("edf5", "edf6")}
+    check(recounted == real, f"after an update HQ counts fully upgraded weapons again {recounted} {real}")
     await pg.reload()
     check(not await pg.locator("#notice").is_visible(), "the update note does not repeat")
-    await pg.evaluate("localStorage.setItem('edfTracker.seenVersion', '0.9.0')")
+    # an update first met on a game page: the game page says so, and HQ still lists what is new, once
+    await pg.evaluate("localStorage.setItem('edfTracker.seenVersion', '0.9.0'); localStorage.setItem('edfTracker.newsVersion', '0.9.0')")
     await pg.goto(BASE + "edf6.html")
     await pg.wait_for_selector(".row")
     check("Updated to " + version in await pg.locator("#toast").inner_text(), "game pages announce an update")
     await pg.evaluate("window.dispatchEvent(new Event('edf-update'))")
     check((await pg.locator("#toastundo").inner_text()).strip() == "Reload", "a version installed while the page is open offers Reload")
     await pg.goto(BASE + "index.html")
+    said = await pg.locator("#notice").inner_text()
+    await pg.reload()
+    check("Updated to " + version in said and "New:" in said and not await pg.locator("#notice").is_visible(), "HQ lists what is new once, also when a game page met the update first")
+    # someone who has never used the tracker is not told about an update
+    cnew = await browser.new_context(viewport=PHONE)
+    pnew = await cnew.new_page()
+    await pnew.goto(BASE + "index.html")
+    await pnew.wait_for_selector("#version")
+    await pnew.wait_for_timeout(300)
+    check(not await pnew.locator("#notice").is_visible() and await pnew.evaluate("localStorage.getItem('edfTracker.newsVersion')") == version[1:], "a first visit shows no update note")
+    await cnew.close()
 
     # ---- display settings
     await pg.evaluate(SET_TEXT, 130)
@@ -431,6 +454,40 @@ async def run(browser) -> None:
     await pg.wait_for_selector(".row")
     t5 = await pg.evaluate(TYPE)
     check(t5["font"] == "Rajdhani" and t5["ts"] == "1.2" and t5["cls"] == [], f"back on the game's own font, at the size set for all pages {t5}")
+    # ---- upgrades are listed in the order of the game's equipment screen, under the game's names
+    listed = {}
+    for g, name, expect in (("edf6", "Lightning Bow", ["Capacity", "Rate of Fire", "Damage", "Shot Speed", "Energy Cost", "Charge Time"]),
+                            ("edf5", "Spark Vine Y3", ["Capacity", "Damage", "Count", "Range", "Energy Cost", "Charge Time"]),
+                            ("edf5", "PA-11", ["Capacity", "Rate of Fire", "Damage", "Reload", "Range", "Accuracy"])):
+        await pg.goto(BASE + g + ".html")
+        await pg.wait_for_selector(".row")
+        await pg.fill("#q", name)
+        await pg.locator(".row__name").first.click()
+        listed[name] = [t.strip() for t in await pg.locator(".stat__label").all_inner_texts()] == expect
+    check(all(listed.values()), f"upgrades are listed like the game's equipment screen {listed}")
+    tapped = await pg.evaluate("""() => { const rows = [...document.querySelectorAll('.stat')]; const reload = rows.find((r) => r.querySelector('.stat__label').textContent === 'Reload');
+        reload.querySelector('[data-act=inc]').click(); return +reload.querySelector('[data-act=inc]').dataset.i; }""")
+    await pg.wait_for_timeout(400)
+    pa11 = json.loads(await pg.evaluate("localStorage.getItem('edfTracker.edf5')"))["stars"].get("AssultRifle01")
+    pa11_data = [it for c in json.loads((ROOT / "data" / "edf5.json").read_text(encoding="utf-8"))["classes"] for k in c["cats"] for it in k["items"] if it[0] == "AssultRifle01"][0]
+    reload_at = [json.loads((ROOT / "data" / "edf5.json").read_text(encoding="utf-8"))["stats"][s] for s, _ in pa11_data[4]].index("Reload")
+    check(tapped == reload_at and pa11 == [1 if i == reload_at else 0 for i in range(len(pa11_data[4]))], f"a tap in the reordered list changes the stat it is on (Reload is upgrade {reload_at} in the data) {pa11}")
+    # changing one stat writes the other stats back as they were saved, even a value above what the data allows
+    other = 0 if reload_at else 1
+    await pg.goto(BASE + "index.html")  # leave the game page first: it saves what it has when it is left
+    await pg.evaluate("(a) => { const p = JSON.parse(localStorage.getItem('edfTracker.edf5')); p.stars.AssultRifle01[a] = 10; localStorage.setItem('edfTracker.edf5', JSON.stringify(p)); }", other)
+    await pg.goto(BASE + "edf5.html")
+    await pg.wait_for_selector(".row")
+    await pg.fill("#q", "PA-11")
+    await pg.locator(".row__name").first.click()
+    shown_other = await pg.evaluate("(i) => document.querySelector('.stat [data-act=inc][data-i=\"' + i + '\"]').disabled", other)
+    await pg.evaluate("(i) => document.querySelector('.stat [data-act=inc][data-i=\"' + i + '\"]').click()", reload_at)
+    await pg.wait_for_timeout(400)
+    pa11 = json.loads(await pg.evaluate("localStorage.getItem('edfTracker.edf5')"))["stars"].get("AssultRifle01")
+    check(shown_other and pa11_data[4][other][1] < 10 and pa11 == [10 if i == other else 2 if i == reload_at else 0 for i in range(len(pa11_data[4]))], f"changing one stat leaves the saved values of the others alone {pa11}")
+    await pg.locator('[data-act="clear"]').click()
+    await pg.locator('.row.is-cur .box').click()
+    await pg.wait_for_timeout(400)
     await pg.goto(BASE + "index.html")
     await pg.locator("#textAuto").click()
     # damaged or hand-edited settings never stop a page from loading; a game's own large size also gets the scrolling layout
@@ -762,23 +819,34 @@ async def run(browser) -> None:
         await ps.wait_for_function(RESULT)
         return [t.strip() for t in await ps.locator("#saveResult button").all_inner_texts()]
 
-    # What the game's own weapon files say about each star stat: weapon -> [[slot, stat code, most stars]].
-    # The expected results below are worked out from these facts and the stat names, not from the
-    # "stars" strings in data/<game>-save.json that the app itself reads.
-    STAT_CODE = {"Capacity": 0, "Count": 4, "Damage": 8, "Durability": 8, "Accuracy": 13, "Shot Speed": 16, "Reload": 21, "Rate of Fire": 25,
-                 "Burst Rate": 29, "Blast Radius": 32, "Lock Range": 36, "Lock Time": 41, "Energy Cost": 45, "Charge Time": 80}
+    # What the game's own weapon files say about each upgradable stat: weapon -> [[slot, stat code, steps]].
+    # "steps" is how many levels the stat has. The game shows a level as stars so that 5 can always be
+    # reached: with 5 steps or more the level itself, with fewer the level plus (5 - steps). So the most
+    # stars a stat can show is max(5, steps). (Seen in the games: a Rate of Fire with 2 steps at level 2
+    # is shown as 5 stars.) The expected results below are worked out from these facts and the stat
+    # names, not from the "stars" strings in data/<game>-save.json that the app itself reads.
+    STAT_CODE = {"Capacity": 0, "Count": 4, "Damage": 8, "Durability": 8, "Accuracy": 13, "Shot Speed": 16, "Range": 16, "Reload": 21, "Rate of Fire": 25,
+                 "Burst Rate": 29, "Blast Radius": 32, "Lock Range": 36, "Lock Time": 41, "Energy Cost": 45}
     STAR_PRINTS = {"edf5": "fbc3505cab2c1157a87d2d83e5bc986873012b27c7eb63fed51f0aa40eb1ff31", "edf6": "157454dbfb635615f48244a18d067629a530e9f0218d035d1e120176b5dfdc43"}
-    ups_of, slot_of = {}, {}
+    ups_of, slot_of, class_of = {}, {}, {}
+
+    def code_of(g, weapon, name):
+        """The game's number for a stat name. "Charge Time" is reloading on Wing Diver weapons and spin-up elsewhere."""
+        if name == "Charge Time":
+            return 21 if class_of[g][weapon] == "Wing Diver" else 80
+        return STAT_CODE[name]
+
     for g in ("edf5", "edf6"):
         data = json.loads((ROOT / "data" / f"{g}.json").read_text(encoding="utf-8"))
         facts = json.loads((ROOT / "tools" / "game-stars" / f"{g}.json").read_text(encoding="utf-8"))
         save_map = json.loads((ROOT / "data" / f"{g}-save.json").read_text(encoding="utf-8"))
         ups_of[g] = {it[0]: [(data["stats"][s], m) for s, m in (it[4] if len(it) > 4 else [])] for c in data["classes"] for k in c["cats"] for it in k["items"]}
-        slot_of[g] = {w: {code: (slot, most) for slot, code, most in rows_} for w, rows_ in facts.items()}
-        wrong = [w for w, ups in ups_of[g].items() if any(slot_of[g].get(w, {}).get(STAT_CODE[name], (None, None))[1] != most for name, most in ups)]
-        described = ["".join(str(slot_of[g][w][STAT_CODE[name]][0]) + "0123456789a"[most] for name, most in ups_of[g][w]) for w in save_map["rows"]]
+        class_of[g] = {it[0]: c["name"] for c in data["classes"] for k in c["cats"] for it in k["items"]}
+        slot_of[g] = {w: {code: (slot, steps) for slot, code, steps in rows_} for w, rows_ in facts.items()}
+        wrong = [w for w, ups in ups_of[g].items() if any(max(5, slot_of[g].get(w, {}).get(code_of(g, w, name), (None, -9))[1]) != most for name, most in ups)]
+        described = ["".join(str(slot_of[g][w][code_of(g, w, name)][0]) + "0123456789a"[slot_of[g][w][code_of(g, w, name)][1]] for name, _ in ups_of[g][w]) for w in save_map["rows"]]
         check(not wrong and save_map.get("stars") == described and hashlib.sha256(json.dumps(save_map["stars"], separators=(",", ":")).encode()).hexdigest() == STAR_PRINTS[g],
-              f"{g}: every stat's most stars and its place in a save are the ones in the game's weapon files {wrong[:3]}")
+              f"{g}: every stat's most stars is max(5, its steps in the game's weapon files), and its place in a save is the one in those files {wrong[:3]}")
 
     async def maxed_is(g, slot, n):
         """True once the profile's summary says n weapons are fully upgraded (the recount runs after the import)."""
@@ -790,8 +858,12 @@ async def run(browser) -> None:
             return False
 
     def stars_in_save(g, weapon, bytes8):
-        """The star levels the tracker should show for a weapon whose eight star bytes in the save are `bytes8`."""
-        return [min(most, bytes8[slot_of[g][weapon][STAT_CODE[name]][0]]) for name, most in ups_of.get(g, {}).get(weapon, [])]
+        """The stars the game shows, and so the tracker should, for a weapon whose eight level bytes in the save are `bytes8`."""
+        out = []
+        for name, _ in ups_of.get(g, {}).get(weapon, []):
+            slot, steps = slot_of[g][weapon][code_of(g, weapon, name)]
+            out.append(min(steps, bytes8[slot]) + max(0, 5 - steps))
+        return out
 
     for g in ("edf41", "edf5", "edf6"):
         rows = maps[g]
@@ -803,7 +875,8 @@ async def run(browser) -> None:
         # star bytes: a mix of levels for the first weapon, everything far above the most for the second,
         # other levels for the third; the rest have none. The entry that is not owned has stars too.
         star_bytes = {0: [1, 2, 3, 4, 5, 6, 7, 8], 1: [10] * 8, 2: [5] * 8, 7: [3, 0, 2, 1, 0, 4, 2, 1]} if has_stars else {}
-        in_save = {rows[r]: stars_in_save(g, rows[r], b) for r, b in star_bytes.items() if r != 2}
+        # every owned weapon counts: one whose levels are all 0 still shows stars on a stat with fewer than 5 steps
+        in_save = {rows[r]: stars_in_save(g, rows[r], star_bytes.get(r, [0] * 8)) for r in (0, 1, 7, 40, last)} if has_stars else {}
         in_save = {w: s for w, s in in_save.items() if any(s)}
         path = await save_file(ps, sdir, g, g, save_plaintext(g, conds, stars=star_bytes))
         card = await ps.locator('[data-count="' + g + '"]').inner_text()
@@ -891,14 +964,19 @@ async def run(browser) -> None:
             dropped = not await ps.locator("#saveResult").is_visible()
             await ps.locator("#saveStars").check()
             check(buttons[0] == "Add 5" and dropped and (await stored(g, "con4"))["owned"] == [], f"{g}: unticking the star box drops a preview that was made with stars")
-            # stars saved by an earlier version above what a stat can really have count as that most
-            inflated = {w: [max(5, m) for _, m in ups_of[g][w]] for w in (rows[0], rows[1])}
+            # v1.8.0 stored a stat that has fewer than 5 steps as its bare level (2 for a full 2-step stat) instead
+            # of the 5 stars the game shows. Importing again must offer to raise those, and bring them to the top.
+            bare = {w: [slot_of[g][w][code_of(g, w, name)][1] for name, _ in ups_of[g][w]] for w in (rows[0], rows[1])}
+            tops = {w: [m for _, m in ups_of[g][w]] for w in (rows[0], rows[1])}
             path_top = await save_file(ps, sdir, g + "-top", g, save_plaintext(g, {0: 1, 1: 1}, stars={0: [10] * 8, 1: [10] * 8}))
-            await ps.evaluate("(a) => localStorage.setItem(a[0], JSON.stringify(a[1]))", ["edfTracker.pc3." + g, {"owned": [rows[0], rows[1]], "stars": inflated}])
+            await ps.evaluate("(a) => localStorage.setItem(a[0], JSON.stringify(a[1]))", ["edfTracker.pc3." + g, {"owned": [rows[0], rows[1]], "stars": bare}])
             await ps.select_option("#saveSlot", "pc3")
             buttons = await choose(path_top)
-            check(any(m < 5 for _, m in ups_of[g][rows[0]]) and buttons == ["Cancel"] and "already match, weapons and stars" in await ps.locator("#saveResult").inner_text(),
-                  f"{g}: stars saved above a stat's real maximum by an earlier version count as that maximum {buttons}")
+            if "Raise stars" in buttons:
+                await ps.locator("#saveResult button", has_text="Raise stars").click()
+            got = await stored(g, "pc3")
+            check(bare != tops and buttons == ["Raise stars", "Cancel"] and got["stars"] == tops and await maxed_is(g, "pc3", 2),
+                  f"{g}: stars that v1.8.0 imported too low are raised to what the game shows by importing again {buttons}")
         # files that must be refused, with nothing changed
         before = await ps.evaluate(ALL)
         good = Path(path).read_bytes()

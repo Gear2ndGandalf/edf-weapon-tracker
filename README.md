@@ -47,7 +47,7 @@ The site is plain HTML, CSS and JavaScript (ES modules). Nothing is compiled, an
 | `data/edf41-legacy.json` | Maps the old checklist's saved positions to the new weapon ids |
 | `js/savefile.js` | Reads the owned weapons, and in EDF 5 and 6 their star levels, out of a game's own PC save file (HQ: Import from game save). The layout is described at the top of the file |
 | `data/edf41-save.json`, `edf5-save.json`, `edf6-save.json` | For each position in a save's weapon table, the tracker's weapon id and, in EDF 5 and 6, where that weapon's star levels are |
-| `tools/game-stars/edf5.json`, `edf6.json` | From the games' own weapon files: for every weapon, each upgradable stat's place in a save, the game's number for the kind of stat, and the most stars it can have |
+| `tools/game-stars/edf5.json`, `edf6.json` | From the games' own weapon files: for every weapon, each upgradable stat's place in a save, the game's number for the kind of stat, and how many upgrade steps it has |
 | `fonts/` | Self-hosted fonts (SIL Open Font License, texts in `fonts/licenses`) |
 
 Each data file also holds the drop tables: `drops = [{name, pack, missions, diffs}]`, where `diffs` has one `[lowestLevels, highestLevels]` pair per difficulty, listing what each mission can drop.
@@ -66,8 +66,8 @@ Data item format: `[id, name, level, source, upgrades]`; source `0` base, `1` st
 Written for browsers released since spring 2021: Safari and iOS 14.5+, Chrome and Edge 84+, Firefox 83+, Samsung Internet 14+. The JavaScript is ES2017 syntax in ES modules. On older browsers the layout loses its spacing (flex `gap`) and some background effects.
 
 ## Data source
-Weapon names, levels, upgradable stats and drop tables come from [edf-calc](https://github.com/zeddidragon/edf-calc) by Tony Sæle (zeddidragon), its sole contributor.
+Weapon names, levels, upgradable stats, star maximums and drop tables come from [edf-calc](https://github.com/zeddidragon/edf-calc) by Tony Sæle (zeddidragon), its sole contributor.
 
 The layout of the games' PC save files, used by Import from game save, was first described in [EDFSaveEditor](https://github.com/FevGrave/EDFSaveEditor) by FevGrave (public domain, CC0). Each game's layout was then checked against real saves. The tracker only reads a save; it never changes one, and the file never leaves the device.
 
-The most stars each stat can have, and where a save keeps each stat's stars, come from the weapon files of the games themselves (EDF 5 and EDF 6, PC), read from an installed copy. edf-calc gives every stat at least five stars; the games have stats that stop at one to four, and the tracker follows the games.
+How many upgrade steps each stat has, and where a save keeps each stat's level, come from the weapon files of the games themselves (EDF 5 and EDF 6, PC), read from an installed copy. A save holds a level from 0 up to the number of steps. The games show it as stars on a scale that always reaches at least five: a stat with fewer than five steps is shown as its level plus the missing steps (level 2 of 2 is ★5). The tracker's star maximums are therefore the larger of five and the number of steps, which is also what edf-calc lists, and Import from game save converts levels the same way.

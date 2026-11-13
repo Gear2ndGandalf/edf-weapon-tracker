@@ -246,6 +246,14 @@ export function checkVersion() {
   if (to && from !== to) setRaw(P + 'seenVersion', to);
   return { updated: !!from && !!to && from !== to, from, to };
 }
+// HQ lists what is new once per version. `seen` is what checkVersion just returned there. The list is
+// also due when the update was first met on a game page, which only says "Updated".
+export function newsDue(seen) {
+  const to = self.APP_VERSION || '';
+  const had = getRaw(P + 'newsVersion');
+  if (to && had !== to) setRaw(P + 'newsVersion', to);
+  return !!to && !!seen && !!seen.from && (seen.updated || had !== to);
+}
 
 // ---------- UI state ----------
 export function loadUI(game) {

@@ -15,12 +15,19 @@ Output item format: [id, name, level, source, upgrades]
 Drop tables: drops = [{name, pack, missions, diffs: [[lowLevels], [highLevels]] per difficulty}]
 
 Star upgrades also use tools/game-stars/edf5.json and edf6.json. Those hold, for every weapon,
-what the game's own weapon files say about each upgradable stat: [slot, stat code, most stars].
-"Most stars" replaces edf-calc's figure, which is never below 5 although the game has stats that
-stop at 1 to 4 stars. "Slot" is where the game's save file keeps that stat's star level; it is
-written into data/edf5-save.json and data/edf6-save.json ("stars": for each save position, two
-characters per upgrade in the item's order: the slot, then the most stars as a base-36 digit),
-which js/savefile.js uses for "Import from game save". The "rows" of those files are kept as they are.
+what the game's own weapon files say about each upgradable stat: [slot, stat code, steps].
+"Slot" is where the game's save file keeps that stat's level. "Steps" is how many levels the
+stat has. The game shows a level as stars so that 5 is always reachable: a stat with 5 or more
+steps shows its level as it is (up to "steps" stars), and a stat with fewer steps shows its
+level plus (5 - steps), so its top is 5 stars. That is why edf-calc's maxStars is never below 5;
+this script checks that it equals max(5, steps) for every stat.
+Slot and steps are written into data/edf5-save.json and data/edf6-save.json ("stars": for each
+save position, two characters per upgrade in the item's order: the slot, then the steps as a
+base-36 digit), which js/savefile.js uses for "Import from game save". The "rows" of those
+files are kept as they are.
+
+Stat names follow the games' own equipment screens where they are known: EDF 5 shows the
+shot-speed stat as Range, and Wing Diver weapons that draw energy show reloading as Charge Time.
 """
 import json
 import sys
@@ -39,6 +46,17 @@ STAT_LABELS = {
     "energy": "Energy Cost", "count": "Count", "lockRange": "Lock Range",
     "lockTime": "Lock Time", "burstRate": "Burst Rate", "windup": "Charge Time", "hp": "Durability",
 }
+
+def stat_label(key: str, stat: str, weapon: dict) -> str:
+    """The name the game's equipment screen uses for a stat, where that differs from STAT_LABELS."""
+    energy = weapon.get("energy")
+    uses_energy = isinstance(energy, dict) or (isinstance(energy, (int, float)) and energy > 0)
+    if stat == "reload" and weapon.get("character") == "winger" and uses_energy:
+        return "Charge Time"
+    if stat == "speed" and key == "5":
+        return "Range"
+    return STAT_LABELS.get(stat, stat)
+
 
 # The game's own number for each kind of stat (the second number of a star entry in a weapon file).
 STAT_CODES = {"ammo": 0, "count": 4, "damage": 8, "hp": 8, "accuracy": 13, "speed": 16, "reload": 21,
@@ -83,10 +101,10 @@ def source_code(weapon: dict) -> int:
 def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
     src = json.loads((calc_dir / "public" / "edf" / f"weapons-{key}.json").read_text(encoding="utf-8"))
     stats: list[str] = []
-    # From the game's weapon files: id -> [[slot, stat code, most stars], ...]
+    # From the game's weapon files: id -> [[slot, stat code, steps], ...]
     facts = json.loads((ROOT / "tools" / "game-stars" / f"edf{key}.json").read_text(encoding="utf-8")) if has_stars else {}
     places: dict[str, str] = {}   # id -> where its upgrades' stars are in a save (see the note at the top)
-    lowered = unlisted = 0
+    short = unlisted = 0
 
     def stat_index(label: str) -> int:
         if label not in stats:
@@ -113,7 +131,7 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
                 item = [w["id"], name, max(0, w["level"]), source_code(w)]
                 if has_stars:
                     mine = facts.get(w["id"], [])
-                    known = {code: (slot, most) for slot, code, most in mine}
+                    known = {code: (slot, steps) for slot, code, steps in mine}
                     if len(known) != len(mine) or len({slot for slot, _, _ in mine}) != len(mine):
                         raise SystemExit(f"EDF {key} {w['id']}: tools/game-stars/edf{key}.json repeats a stat code or a slot")
                     ups, where = [], ""
@@ -122,12 +140,14 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
                             continue
                         if k not in STAT_CODES or v.get("algo") != STAT_CODES[k] or STAT_CODES[k] not in known:
                             raise SystemExit(f"EDF {key} {w['id']}: stat {k!r} is not in tools/game-stars/edf{key}.json as expected")
-                        slot, most = known[STAT_CODES[k]]
-                        if not (0 <= slot <= 7 and 1 <= most <= 10 and most <= v["lvMax"]):
-                            raise SystemExit(f"EDF {key} {w['id']}: unexpected star data for {k!r}: slot {slot}, most {most}")
-                        lowered += most < v["lvMax"]
-                        ups.append([stat_index(STAT_LABELS.get(k, k)), most])
-                        where += str(slot) + DIGITS[most]
+                        slot, steps = known[STAT_CODES[k]]
+                        if not (0 <= slot <= 7 and 1 <= steps <= 10 and max(5, steps) == v["lvMax"]):
+                            raise SystemExit(f"EDF {key} {w['id']}: unexpected star data for {k!r}: slot {slot}, steps {steps}, edf-calc max {v['lvMax']}")
+                        short += steps < 5
+                        ups.append([stat_index(stat_label(key, k, w)), v["lvMax"]])
+                        where += str(slot) + DIGITS[steps]
+                    if len({s for s, _ in ups}) != len(ups):
+                        raise SystemExit(f"EDF {key} {w['id']}: two of its stats would get the same name")
                     unlisted += len(known) > len(ups)
                     places[w["id"]] = where
                     if ups:
@@ -148,7 +168,7 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
     if has_stars:
         save_map.write_text(json.dumps({"game": "edf" + key, "rows": rows, "stars": [places[i] for i in rows]},
                                        ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-        print(f"  {title}: {lowered} stats stop below 5 stars in the game; "
+        print(f"  {title}: {short} stats have fewer than 5 steps (the game shows their top as 5 stars); "
               f"{unlisted} weapons have a star stat in the game that edf-calc does not list")
     missing = len(src["weapons"]) - len(seen_ids)
     if missing:

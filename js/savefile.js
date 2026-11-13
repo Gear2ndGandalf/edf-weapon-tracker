@@ -22,10 +22,11 @@
 //   • The weapon table is the last part of the file: `rows` entries of `rowSize`
 //     bytes. The first four bytes of an entry are a number whose lowest bit says
 //     "owned" (other bits mark things like "new"). In EDF 5 and 6 eight more
-//     bytes hold the weapon's star levels, as plain numbers (5 is five stars).
-//     Which byte belongs to which upgrade differs from weapon to weapon; the
-//     game's own weapon files say so, and tools/build_data.py copies that into
-//     the "stars" list of data/<game>-save.json.
+//     bytes hold the levels of the weapon's upgrades (see starsOf below for how
+//     a level becomes the stars the game shows). Which byte belongs to which
+//     upgrade differs from weapon to weapon; the game's own weapon files say
+//     so, and tools/build_data.py copies that into the "stars" list of
+//     data/<game>-save.json.
 //   • An entry's position is the weapon's place in the game's own weapon table.
 //     data/<game>-save.json lists the tracker's weapon id for each position ("rows")
 //     and, for EDF 5 and 6, where each of the weapon's upgrades keeps its star level
@@ -113,17 +114,21 @@ export function wrongFile(game) {
 
 // Star levels of one weapon, in the tracker's own order of upgrades. `where` comes from the map
 // file: two characters per upgrade, the first saying which of the entry's eight star bytes holds
-// it, the second the most stars that upgrade can have (as one base-36 digit).
-// Returns { now: [stars per upgrade], most: [the most each can have] }.
+// it, the second how many steps that upgrade has (as one base-36 digit).
+// The byte is the upgrade's level, from 0 to its number of steps. The game shows it as stars so
+// that 5 can always be reached: with 5 steps or more the level is shown as it is, and with fewer
+// it is shown as the level plus (5 - steps). A level of 2 out of 2 steps is shown as 5 stars.
+// Returns { now: [stars per upgrade, as the game shows them], most: [the most each can show] }.
 function starsOf(plain, at, where) {
   const now = [];
   const most = [];
   for (let j = 0; j + 1 < where.length; j += 2) {
     const slot = parseInt(where[j], 10);
-    const cap = parseInt(where[j + 1], 36);
-    if (!(slot >= 0 && slot < 8) || !(cap >= 0)) return null; // not a description this version understands
-    now.push(Math.min(cap, plain[at + 4 + slot]));
-    most.push(cap);
+    const steps = parseInt(where[j + 1], 36);
+    if (!(slot >= 0 && slot < 8) || !(steps >= 1)) return null; // not a description this version understands
+    const shift = Math.max(0, 5 - steps);
+    now.push(Math.min(steps, plain[at + 4 + slot]) + shift);
+    most.push(steps + shift);
   }
   return { now, most };
 }

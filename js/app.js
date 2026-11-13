@@ -22,6 +22,10 @@ const currentSlot = () => (store.activeSlot ? store.activeSlot(GAME) : store.act
 const SLOT = currentSlot();
 const $ = (sel) => document.querySelector(sel);
 const BADGES = { 2: 'DLC', 3: 'MP1', 4: 'MP2' };
+// Upgrades are listed in the order of the games' equipment screens. A name that is not here goes last.
+const STAT_ORDER = ['Capacity', 'Rate of Fire', 'Burst Rate', 'Damage', 'Count', 'Blast Radius', 'Durability', 'Reload', 'Shot Speed', 'Range',
+  'Accuracy', 'Lock Range', 'Lock Time', 'Energy Cost', 'Charge Time'];
+const statRank = (name) => { const at = STAT_ORDER.indexOf(name); return at === -1 ? STAT_ORDER.length : at; };
 const SEARCH_LIMIT = 150;
 const STAR = '<i class="ico ico--star" aria-hidden="true"></i>';
 const CHECK = '<i class="ico ico--check" aria-hidden="true"></i>';
@@ -49,6 +53,14 @@ const isOwned = (w) => prog.owned.has(w.id);
 function starsOf(w) {
   const saved = prog.stars[w.id] || [];
   return w.up.map((u, i) => clamp(saved[i] | 0, 0, u.max));
+}
+// The saved list as it is, at full length, with one stat set. The other stats are written back
+// untouched, so a maximum that is wrong for a while (old data during an update) cannot lower them.
+function withStar(w, i, n) {
+  const saved = prog.stars[w.id] || [];
+  const list = w.up.map((_, k) => Math.max(0, saved[k] | 0));
+  list[i] = n;
+  return list;
 }
 const capOf = (w) => w.up.reduce((a, u) => a + u.max, 0);
 // One element per star. Tapping star k sets the stat to k; tapping the last lit star turns it off.
@@ -378,7 +390,8 @@ function renderDetail() {
   if (showStars) {
     const stars = starsOf(w);
     if (!has) html += '<div class="empty">This item has no star upgrades.</div>';
-    w.up.forEach((u, i) => {
+    w.show.forEach((i) => {
+      const u = w.up[i];
       const n = stars[i];
       html += '<div class="stat"><div class="stat__main"><span class="stat__label">' + esc(u.stat) + '</span>' +
         '<span class="stat__stars" role="img" aria-label="' + esc(u.stat) + ': ' + n + ' of ' + u.max + ' stars">' +
@@ -491,17 +504,13 @@ function act(name, el) {
     case 'inc':
     case 'dec': {
       if (!w || !w.up[i]) return;
-      const s = starsOf(w);
-      s[i] = clamp(s[i] + (name === 'inc' ? 1 : -1), 0, w.up[i].max);
-      setStars(w, s);
+      setStars(w, withStar(w, i, clamp(starsOf(w)[i] + (name === 'inc' ? 1 : -1), 0, w.up[i].max)));
       break;
     }
     case 'star': {
       if (!w || !w.up[i]) return;
       const n = Number(el.dataset.n);
-      const s = starsOf(w);
-      s[i] = clamp(s[i] === n ? n - 1 : n, 0, w.up[i].max);
-      setStars(w, s);
+      setStars(w, withStar(w, i, clamp(starsOf(w)[i] === n ? n - 1 : n, 0, w.up[i].max)));
       break;
     }
     case 'max':
@@ -624,6 +633,8 @@ async function boot() {
         id: t[0], name: t[1], lname: t[1].toLowerCase(), level: t[2], src: t[3],
         up: (t[4] || []).map((u) => ({ stat: D.stats[u[0]], max: u[1] })), ci, ki,
       };
+      // The order to show them in. Saved stars stay in the data's own order (the "up" list).
+      w.show = w.up.map((_, i) => i).sort((a, b) => statRank(w.up[a].stat) - statRank(w.up[b].stat) || a - b);
       all.push(w);
       byId.set(w.id, w);
       return w;

@@ -291,7 +291,7 @@ function planSave(p, found, match, withStars) {
     found.owned.forEach((id) => {
       const want = found.stars[id];
       if (!want || !want.length) return;
-      // What is saved here counts up to the most each upgrade can have (older versions allowed more for some).
+      // What is saved here counts up to the most each upgrade can have.
       const caps = (found.most && found.most[id]) || [];
       const have = starList(p.stars[id], want.length).map((n, i) => (caps[i] >= 0 ? Math.min(n, caps[i]) : n));
       const now = match ? want.slice() : want.map((n, i) => Math.max(n, have[i]));
@@ -636,5 +636,11 @@ showProfiles();
 showProgress();
 showPrefs();
 showBackup();
-if (seen.updated) notice('Updated to v' + seen.to + '. New: ' + (self.APP_NEWS || []).join(', ') + '.');
+// (an older store.js may still be in use right after an update; it has no newsDue)
+const news = store.newsDue ? store.newsDue(seen) : seen.updated;
+if (news) {
+  notice('Updated to v' + seen.to + '. New: ' + (self.APP_NEWS || []).join(', ') + '.');
+  // The count of fully upgraded weapons was made with the star maximums of the version before; make it again.
+  ['edf5', 'edf6'].forEach((g) => (store.SLOTS || []).forEach((slot) => { if (store.loadSummary(g, slot).maxed > 0) recountMaxed(g, slot); }));
+}
 offerLegacy(); // replaces the update note when there is an old checklist to import

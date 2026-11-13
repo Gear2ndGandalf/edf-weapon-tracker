@@ -7,13 +7,28 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.8.1 – 2026-11-13
+### Fixed
+- **Star maximums are back to what the game shows.** v1.8.0 lowered the maximum of stats that have fewer than five upgrade steps (to one to four stars). That was a mistake: the game shows such a stat on a scale that still ends at five, so a stat with two steps reads ★5 when it is finished, not ★2. Every maximum is again what it was up to v1.7.0.
+- **Imported stars match the game's equipment screen.** A save holds each stat's level, from 0 up to its number of steps. For a stat with fewer than five steps the game shows the level plus the missing steps (level 2 of 2 is shown as 5), and the import now does the same. v1.8.0 brought such stats over too low.
+  - **If you imported stars with v1.8.0, import the same save again and choose Add (or Raise stars).** That lifts the stats that came over too low. Nothing is lowered.
+  - A weapon whose stars you changed by hand in v1.8.0 may have kept the lowered value on such a stat; set it again or import your save.
+- **Stat names follow the game.** The reload stat of Wing Diver weapons that run on energy is **Charge Time**, and EDF 5's shot speed stat is **Range**, as on the game's equipment screen. Saved stars are not affected by the new names.
+- **Stats are listed in the order of the game's equipment screen** (Capacity, Rate of Fire, Damage, … Energy Cost, Charge Time) instead of the order of the source data. Only the order on screen changes; saved stars stay with their stat. The order was compared with the game on three weapons; stats those do not have (Burst Rate, Blast Radius, Lock Range, Lock Time, and the Fencer's spin-up Charge Time) are placed by best guess.
+
+### Notes
+- Checked against the game on two weapons (EDF 6 Lightning Bow and EDF 5 Spark Vine Y3): every star the tracker imports is the one on the equipment screen, with one difference that remains. The game shows a single star for Damage on weapons that fire several shots at once ("44.4 × 3") and folds the number of shots into it; the tracker keeps **Damage** and **Count** as two stats, so the Damage star can differ from the game's by one or two on those weapons.
+- The scale for stats with fewer than five steps was confirmed on finished stats (level 2 of 2 and 3 of 3 both read ★5 in the game). Levels in between follow from how the games work out a stat's value (★5 is always the listed value), but have not been compared with the equipment screen yet.
+- HQ now lists what is new also when the update was first met on a game page, and counts fully upgraded weapons again after this update (the count had been made with the lowered maximums).
+- Changing one stat's stars no longer rewrites the weapon's other stats.
+
 ## v1.8.0 – 2026-11-13
 ### Added
 - **Import from game save reads star levels** (EDF 5 and 6). **Add** raises stars and never lowers one. **Match the save** sets them to the save's levels. **Undo** puts them back, except on a weapon whose stars you changed again afterwards; such a weapon also stays marked. Untick "Also read star levels" to bring over the weapons only.
 - A profile that already has a save's weapons but not its stars is offered **Raise stars**.
 
 ### Fixed
-- **Stats that stop below five stars.** Some upgrades end at one to four stars in the games, but the tracker showed five for them, so a weapon that was finished in the game still looked unfinished here: 269 stats on 262 weapons in EDF 5, and 334 stats on 322 weapons in EDF 6. They now show the games' own maximum. Stars saved above a new maximum count as that maximum; nothing else about saved progress changes.
+- **Stats that stop below five stars** (this was wrong and is undone in v1.8.1). Some upgrades end at one to four stars in the games, but the tracker showed five for them, so a weapon that was finished in the game still looked unfinished here: 269 stats on 262 weapons in EDF 5, and 334 stats on 322 weapons in EDF 6. They now show the games' own maximum. Stars saved above a new maximum count as that maximum; nothing else about saved progress changes.
 
 ### Notes
 - The star maximums and the place of each stat's stars in a save come from the games' own weapon files (`tools/game-stars/`), and were checked against real saves: every one of 2,380 star values fits, and 623 sit exactly at their maximum.
