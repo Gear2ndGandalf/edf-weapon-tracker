@@ -117,7 +117,8 @@ export function wrongFile(game) {
 // it, the second how many steps that upgrade has (as one base-36 digit).
 // The byte is the upgrade's level, from 0 to its number of steps. The game shows it as stars so
 // that 5 can always be reached: with 5 steps or more the level is shown as it is, and with fewer
-// it is shown as the level plus (5 - steps). A level of 2 out of 2 steps is shown as 5 stars.
+// it is stretched onto 0..5, as level * 5 / steps rounded down (this is in the games' own code).
+// With 3 steps the levels 0, 1, 2, 3 are shown as 0, 1, 3 and 5 stars.
 // Returns { now: [stars per upgrade, as the game shows them], most: [the most each can show] }.
 function starsOf(plain, at, where) {
   const now = [];
@@ -126,9 +127,9 @@ function starsOf(plain, at, where) {
     const slot = parseInt(where[j], 10);
     const steps = parseInt(where[j + 1], 36);
     if (!(slot >= 0 && slot < 8) || !(steps >= 1)) return null; // not a description this version understands
-    const shift = Math.max(0, 5 - steps);
-    now.push(Math.min(steps, plain[at + 4 + slot]) + shift);
-    most.push(steps + shift);
+    const level = Math.min(steps, plain[at + 4 + slot]);
+    now.push(steps >= 5 ? level : Math.floor(level * 5 / steps));
+    most.push(Math.max(5, steps));
   }
   return { now, most };
 }

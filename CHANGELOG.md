@@ -7,10 +7,30 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.9.0 – 2026-11-13
+### Changed
+- **Upgrades follow the game's equipment screen exactly** (EDF 5 and 6). The lines, their names and their order are now read from the games' own weapon text, weapon by weapon, instead of being guessed from a list of stat names. So a rifle shows Capacity, ROF, Damage, Reload Time, Range, Shot Speed, Accuracy, a drone shows Number, and an air strike shows Re-request, as in the game. Saved stars are not affected: only names and the order on screen change.
+- **Lines with two values show the game's star.** Where the game prints one star for two values (Damage × Count on shotguns and Wing Diver weapons, Lock-on range and targets, a Fencer's melee Damage and Range), the tracker shows that line with "In game: ☆4" and the two values under it. The game's star is their average, and half a star is printed as "+" (☆4+ is 4.5).
+- A value the game shows on two lines (Range and Shot Speed come from the same upgrade) has one row of stars; the second line says which row it repeats.
+
+### Added
+- **Three Fencer upgrades that were missing**: Charge Speed, Swing Speed and Ready Speed (45 weapons in EDF 5, 60 in EDF 6). They are added after each weapon's other upgrades, so saved stars keep their places. A weapon that counted as fully upgraded without them is no longer counted until they are filled in.
+
+### Fixed
+- **Imported stars for upgrades with fewer than five steps.** v1.8.1 showed such an upgrade as its level plus the missing steps. That was right for a finished upgrade and wrong for an unfinished one. The game stretches the level onto 0 to 5 (level × 5 ÷ steps, rounded down): with 3 steps the levels 0, 1, 2, 3 are ☆0, ☆1, ☆3 and ★5. The import now does the same.
+  - **If you imported stars with v1.8.0 or v1.8.1, import the same save again and choose Match the save.** That sets every star to what the game shows. (Add never lowers a star, and stars imported with v1.8.1 have to come down.) If Match the save is not offered, nothing has to come down: choose Raise stars or Add.
+- `tools/build_data.py` as published with v1.8.1 stopped with an error (a variable was used for two things). It runs again.
+
+### Notes
+- The rules above were read from the games' program code (EDF 5: `EDF5.exe`, EDF 6: `EDF.dll`) and the lines from `WEAPONTEXT` in `Root.cpk`. Checked against the game: EDF 5 Spark Vine Y3 matches on every line, including Damage ☆4 (Damage ☆3 and Count ★5). On three real saves, all 2,342 star lines the tracker shows after an import equal a separate calculation from the save's bytes.
+- New facts file `tools/game-lines/` (which lines each weapon has and what they show). Item format in `data/edf5.json` and `data/edf6.json` gained a sixth entry, `lines`.
+- Changing one upgrade's stars keeps stars saved for upgrades the page does not know yet (an older copy of the weapon list during an update).
+- `tools/build_data.py` refuses to write data in which a weapon's upgrades would change places.
+
 ## v1.8.1 – 2026-11-13
 ### Fixed
 - **Star maximums are back to what the game shows.** v1.8.0 lowered the maximum of stats that have fewer than five upgrade steps (to one to four stars). That was a mistake: the game shows such a stat on a scale that still ends at five, so a stat with two steps reads ★5 when it is finished, not ★2. Every maximum is again what it was up to v1.7.0.
-- **Imported stars match the game's equipment screen.** A save holds each stat's level, from 0 up to its number of steps. For a stat with fewer than five steps the game shows the level plus the missing steps (level 2 of 2 is shown as 5), and the import now does the same. v1.8.0 brought such stats over too low.
+- **Imported stars match the game's equipment screen** (not for unfinished upgrades with fewer than five steps; corrected in v1.9.0). A save holds each stat's level, from 0 up to its number of steps. For a stat with fewer than five steps the game shows the level plus the missing steps (level 2 of 2 is shown as 5), and the import now does the same. v1.8.0 brought such stats over too low.
   - **If you imported stars with v1.8.0, import the same save again and choose Add (or Raise stars).** That lifts the stats that came over too low. Nothing is lowered.
   - A weapon whose stars you changed by hand in v1.8.0 may have kept the lowered value on such a stat; set it again or import your save.
 - **Stat names follow the game.** The reload stat of Wing Diver weapons that run on energy is **Charge Time**, and EDF 5's shot speed stat is **Range**, as on the game's equipment screen. Saved stars are not affected by the new names.

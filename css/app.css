@@ -243,6 +243,11 @@ html.type-bold body { -webkit-text-stroke: 0.022em currentColor; }
   -webkit-mask-image: var(--img-star-off); mask-image: var(--img-star-off);
 }
 .stat__btn { height: 42px; min-height: 42px; padding: 0; font-size: calc(20px * var(--ts, 1)); }
+/* A line of the game's equipment screen that has no star row of its own: the heading of a line with several
+   values, or a line that repeats a value shown above. */
+.statline { flex-shrink: 0; min-height: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 3px 0; }
+.statline__note { flex: 1 1 120px; min-width: 0; font-size: calc(13px * var(--ts, 1)); color: var(--dim); }
+.stat--part .stat__label, .statline--part .stat__label { padding-left: calc(12px * var(--ts, 1)); color: var(--dim); }
 
 /* ---------- Bottom game nav ---------- */
 .nav {

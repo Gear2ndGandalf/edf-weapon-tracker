@@ -3,9 +3,10 @@
 // The page says which game it is with <body data-game="edf5">, and the theme
 // file decides how it looks. Data comes from data/<game>.json:
 //   { game, key, hasStars, stats: [statName...],
-//     classes: [{ name, short, cats: [{ name, items: [[id, name, level, source, upgrades?]] }] }] }
+//     classes: [{ name, short, cats: [{ name, items: [[id, name, level, source, upgrades?, lines?]] }] }] }
 //   source: 0 base, 1 starter, 2 DLC, 3 Mission Pack 1, 4 Mission Pack 2
 //   upgrades: [[statIndex, maxStars], ...]   (EDF 5 and 6 only)
+//   lines: [[statIndex, [upgrade, ...]], ...]   the lines of the game's equipment screen that carry a star
 //   difficulties: [name...], drops: [{ name, pack, missions, diffs: [[lowLevels], [highLevels]] }]
 //
 // Flow: a click finds the nearest [data-act] element -> act() changes the
@@ -22,10 +23,6 @@ const currentSlot = () => (store.activeSlot ? store.activeSlot(GAME) : store.act
 const SLOT = currentSlot();
 const $ = (sel) => document.querySelector(sel);
 const BADGES = { 2: 'DLC', 3: 'MP1', 4: 'MP2' };
-// Upgrades are listed in the order of the games' equipment screens. A name that is not here goes last.
-const STAT_ORDER = ['Capacity', 'Rate of Fire', 'Burst Rate', 'Damage', 'Count', 'Blast Radius', 'Durability', 'Reload', 'Shot Speed', 'Range',
-  'Accuracy', 'Lock Range', 'Lock Time', 'Energy Cost', 'Charge Time'];
-const statRank = (name) => { const at = STAT_ORDER.indexOf(name); return at === -1 ? STAT_ORDER.length : at; };
 const SEARCH_LIMIT = 150;
 const STAR = '<i class="ico ico--star" aria-hidden="true"></i>';
 const CHECK = '<i class="ico ico--check" aria-hidden="true"></i>';
@@ -55,14 +52,23 @@ function starsOf(w) {
   return w.up.map((u, i) => clamp(saved[i] | 0, 0, u.max));
 }
 // The saved list as it is, at full length, with one stat set. The other stats are written back
-// untouched, so a maximum that is wrong for a while (old data during an update) cannot lower them.
+// untouched, so a maximum that is wrong for a while (old data during an update) cannot lower them,
+// and stars saved for upgrades this copy of the data does not list yet are kept.
 function withStar(w, i, n) {
   const saved = prog.stars[w.id] || [];
-  const list = w.up.map((_, k) => Math.max(0, saved[k] | 0));
+  const list = Array.from({ length: Math.max(saved.length, w.up.length) }, (_, k) => Math.max(0, saved[k] | 0));
   list[i] = n;
   return list;
 }
 const capOf = (w) => w.up.reduce((a, u) => a + u.max, 0);
+// The star the game prints in front of a line of its equipment screen: the average of the line's upgrades,
+// cut to tenths. Half a star is printed as "+", and the star is filled only when the line is finished.
+function gameStar(w, line, stars) {
+  const n = line.ups.length;
+  const now = Math.floor(10 * line.ups.reduce((a, i) => a + stars[i], 0) / n);
+  const top = Math.floor(10 * line.ups.reduce((a, i) => a + w.up[i].max, 0) / n);
+  return (now === top ? '★' : '☆') + Math.floor(now / 10) + (now % 10 ? '+' : '');
+}
 // One element per star. Tapping star k sets the stat to k; tapping the last lit star turns it off.
 // (The − and + buttons do the same job for keyboards and screen readers.)
 function starHtml(statIndex, lit, max) {
@@ -390,14 +396,31 @@ function renderDetail() {
   if (showStars) {
     const stars = starsOf(w);
     if (!has) html += '<div class="empty">This item has no star upgrades.</div>';
-    w.show.forEach((i) => {
+    // One row per upgrade, where the game first shows it. "i" is the upgrade's place in the saved list.
+    const row = (i, label, part) => {
       const u = w.up[i];
       const n = stars[i];
-      html += '<div class="stat"><div class="stat__main"><span class="stat__label">' + esc(u.stat) + '</span>' +
+      return '<div class="stat' + (part ? ' stat--part' : '') + '"><div class="stat__main"><span class="stat__label">' + esc(label) + '</span>' +
         '<span class="stat__stars" role="img" aria-label="' + esc(u.stat) + ': ' + n + ' of ' + u.max + ' stars">' +
           starHtml(i, n, u.max) + '</span></div>' +
         '<button type="button" class="btn btn--ghost stat__btn" data-act="dec" data-i="' + i + '" aria-label="Remove a star: ' + esc(u.stat) + '"' + (n === 0 ? ' disabled' : '') + '>−</button>' +
         '<button type="button" class="btn btn--ghost stat__btn" data-act="inc" data-i="' + i + '" aria-label="Add a star: ' + esc(u.stat) + '"' + (n === u.max ? ' disabled' : '') + '>+</button></div>';
+    };
+    const note = (label, text, part) => '<div class="statline' + (part ? ' statline--part' : '') + '"><span class="stat__label">' + esc(label) + '</span>' +
+      '<span class="statline__note">' + esc(text) + '</span></div>';
+    const partName = (line, i) => { const s = w.up[i].stat; return s.indexOf(line.label + ': ') === 0 ? s.slice(line.label.length + 2) : s; };
+    const drawn = new Set(); // upgrades that have their row already
+    w.lines.forEach((line) => {
+      const fresh = line.ups.filter((i) => !drawn.has(i));
+      if (line.ups.length === 1 && fresh.length) {
+        html += row(line.ups[0], line.label, false);
+      } else if (line.ups.length === 1) { // the game shows this value on a second line (Shot Speed and Range)
+        html += note(line.label, gameStar(w, line, stars) + ' · same as ' + w.up[line.ups[0]].stat, false);
+      } else { // several values on one line: the game shows one star for them, their average
+        html += note(line.label, 'In game: ' + gameStar(w, line, stars) + (fresh.length ? '' : ' · set above'), false);
+        line.ups.forEach((i) => { html += drawn.has(i) ? (fresh.length ? note(partName(line, i), '☆★'[+(stars[i] === w.up[i].max)] + stars[i] + ' · set above', true) : '') : row(i, partName(line, i), true); });
+      }
+      fresh.forEach((i) => drawn.add(i));
     });
   } else {
     html += dropsHtml(w);
@@ -515,7 +538,7 @@ function act(name, el) {
     }
     case 'max':
       if (!w) return;
-      setStars(w, w.up.map((u) => u.max));
+      setStars(w, w.up.map((u) => u.max).concat((prog.stars[w.id] || []).slice(w.up.length)));
       break;
     case 'clear': {
       if (!w || !haveOf(w)) return;
@@ -633,8 +656,13 @@ async function boot() {
         id: t[0], name: t[1], lname: t[1].toLowerCase(), level: t[2], src: t[3],
         up: (t[4] || []).map((u) => ({ stat: D.stats[u[0]], max: u[1] })), ci, ki,
       };
-      // The order to show them in. Saved stars stay in the data's own order (the "up" list).
-      w.show = w.up.map((_, i) => i).sort((a, b) => statRank(w.up[a].stat) - statRank(w.up[b].stat) || a - b);
+      // The lines of the game's equipment screen that carry a star, in the game's order: its label and the
+      // upgrades it shows. Saved stars stay in the data's own order (the "up" list); this is only for display.
+      // Data without lines (an older copy during an update): every upgrade is its own line.
+      const listed = new Set();
+      w.lines = (t[5] || []).map((l) => ({ label: D.stats[l[0]], ups: (l[1] || []).filter((i) => w.up[i]) })).filter((l) => l.label && l.ups.length);
+      w.lines.forEach((l) => l.ups.forEach((i) => listed.add(i)));
+      w.up.forEach((u, i) => { if (!listed.has(i)) w.lines.push({ label: u.stat, ups: [i] }); });
       all.push(w);
       byId.set(w.id, w);
       return w;
