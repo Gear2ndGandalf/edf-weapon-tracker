@@ -70,14 +70,17 @@ def _crc32c(data: bytes) -> int:
     return crc ^ 0xFFFFFFFF
 
 
-def save_plaintext(game: str, conds: dict, fmt=None, fix_sum: bool = True) -> bytes:
-    """A decoded save: header, zeroes, and a weapon table whose entry `row` starts with the number conds[row]."""
+def save_plaintext(game: str, conds: dict, fmt=None, fix_sum: bool = True, stars=None) -> bytes:
+    """A decoded save: header, zeroes, and a weapon table whose entry `row` starts with the number conds[row].
+    stars[row] is that entry's eight star bytes (EDF 5 and 6)."""
     lay = SAVE_LAYOUT[game]
     plain = bytearray(lay["size"])
     plain[0:4] = b"MDB0"
     struct.pack_into("<II", plain, 4, lay["format"] if fmt is None else fmt, lay["size"] - lay["body"])
     for row, cond in conds.items():
         struct.pack_into("<I", plain, lay["table"] + row * lay["row"], cond)
+    for row, eight in (stars or {}).items():
+        plain[lay["table"] + row * lay["row"] + 4: lay["table"] + row * lay["row"] + 12] = bytes(eight)
     body = bytes(plain[lay["body"]:])
     total = zlib.crc32(body) if lay["sum"] == "crc32" else _crc32c(body) ^ 0xFFFFFFFF
     struct.pack_into("<I", plain, 12, (total if fix_sum else total ^ 1) & 0xFFFFFFFF)
@@ -759,58 +762,143 @@ async def run(browser) -> None:
         await ps.wait_for_function(RESULT)
         return [t.strip() for t in await ps.locator("#saveResult button").all_inner_texts()]
 
+    # What the game's own weapon files say about each star stat: weapon -> [[slot, stat code, most stars]].
+    # The expected results below are worked out from these facts and the stat names, not from the
+    # "stars" strings in data/<game>-save.json that the app itself reads.
+    STAT_CODE = {"Capacity": 0, "Count": 4, "Damage": 8, "Durability": 8, "Accuracy": 13, "Shot Speed": 16, "Reload": 21, "Rate of Fire": 25,
+                 "Burst Rate": 29, "Blast Radius": 32, "Lock Range": 36, "Lock Time": 41, "Energy Cost": 45, "Charge Time": 80}
+    STAR_PRINTS = {"edf5": "fbc3505cab2c1157a87d2d83e5bc986873012b27c7eb63fed51f0aa40eb1ff31", "edf6": "157454dbfb635615f48244a18d067629a530e9f0218d035d1e120176b5dfdc43"}
+    ups_of, slot_of = {}, {}
+    for g in ("edf5", "edf6"):
+        data = json.loads((ROOT / "data" / f"{g}.json").read_text(encoding="utf-8"))
+        facts = json.loads((ROOT / "tools" / "game-stars" / f"{g}.json").read_text(encoding="utf-8"))
+        save_map = json.loads((ROOT / "data" / f"{g}-save.json").read_text(encoding="utf-8"))
+        ups_of[g] = {it[0]: [(data["stats"][s], m) for s, m in (it[4] if len(it) > 4 else [])] for c in data["classes"] for k in c["cats"] for it in k["items"]}
+        slot_of[g] = {w: {code: (slot, most) for slot, code, most in rows_} for w, rows_ in facts.items()}
+        wrong = [w for w, ups in ups_of[g].items() if any(slot_of[g].get(w, {}).get(STAT_CODE[name], (None, None))[1] != most for name, most in ups)]
+        described = ["".join(str(slot_of[g][w][STAT_CODE[name]][0]) + "0123456789a"[most] for name, most in ups_of[g][w]) for w in save_map["rows"]]
+        check(not wrong and save_map.get("stars") == described and hashlib.sha256(json.dumps(save_map["stars"], separators=(",", ":")).encode()).hexdigest() == STAR_PRINTS[g],
+              f"{g}: every stat's most stars and its place in a save are the ones in the game's weapon files {wrong[:3]}")
+
+    async def maxed_is(g, slot, n):
+        """True once the profile's summary says n weapons are fully upgraded (the recount runs after the import)."""
+        try:
+            await ps.wait_for_function("(a) => { try { return JSON.parse(localStorage.getItem(a[0]) || '{}').maxed === a[1]; } catch (e) { return false; } }",
+                                       arg=["edfTracker." + slot + ".summary." + g, n], timeout=5000)
+            return True
+        except Exception:
+            return False
+
+    def stars_in_save(g, weapon, bytes8):
+        """The star levels the tracker should show for a weapon whose eight star bytes in the save are `bytes8`."""
+        return [min(most, bytes8[slot_of[g][weapon][STAT_CODE[name]][0]]) for name, most in ups_of.get(g, {}).get(weapon, [])]
+
     for g in ("edf41", "edf5", "edf6"):
         rows = maps[g]
         last = len(rows) - 1
+        has_stars = g != "edf41"
         # owned in several ways (lowest bit set), one entry that is not owned (2), and one past the tracker's list
         conds = {0: 1, 1: 3, 2: 2, 7: 5, 40: 11, last: 9, len(rows) + 3: 1}
         want = sorted([rows[0], rows[1], rows[7], rows[40], rows[last]])
-        path = await save_file(ps, sdir, g, g, save_plaintext(g, conds))
+        # star bytes: a mix of levels for the first weapon, everything far above the most for the second,
+        # other levels for the third; the rest have none. The entry that is not owned has stars too.
+        star_bytes = {0: [1, 2, 3, 4, 5, 6, 7, 8], 1: [10] * 8, 2: [5] * 8, 7: [3, 0, 2, 1, 0, 4, 2, 1]} if has_stars else {}
+        in_save = {rows[r]: stars_in_save(g, rows[r], b) for r, b in star_bytes.items() if r != 2}
+        in_save = {w: s for w, s in in_save.items() if any(s)}
+        path = await save_file(ps, sdir, g, g, save_plaintext(g, conds, stars=star_bytes))
         card = await ps.locator('[data-count="' + g + '"]').inner_text()
         await ps.select_option("#saveGame", g)
         await ps.select_option("#saveSlot", "con3")
+        check(await ps.locator("#saveStarsRow").is_visible() == has_stars and await ps.locator("#saveStars").is_checked(), f"{g}: reading star levels is {'offered and on' if has_stars else 'not offered (the game has none)'}")
         buttons = await choose(path)
-        said = (await ps.locator("#saveResult p").first.inner_text()).strip()
-        check(f"owns 5 of {totals[g]} weapons" in said and buttons == ["Add 5", "Cancel"] and (await stored(g, "con3"))["owned"] == [], f"{g}: the save is read and shown before anything changes ({said})")
+        said = " ".join([t.strip() for t in await ps.locator("#saveResult p").all_inner_texts()])
+        check(f"owns 5 of {totals[g]} weapons" in said and buttons == ["Add 5", "Cancel"] and (await stored(g, "con3"))["owned"] == [] and (("raises the stars of %d weapons" % len(in_save)) in said) == has_stars,
+              f"{g}: the save is read and shown before anything changes ({said[:60]})")
         await ps.locator("#saveResult button", has_text="Add").click()
+        counted = await maxed_is(g, "con3", 1 if has_stars else 0)
         got = await stored(g, "con3")
         slot_count = (await ps.evaluate("(g) => { document.querySelector('#segGame button[data-game=' + g + ']').click(); return document.querySelector('#segProfile .slot[data-slot=con3] .slot__count').textContent; }", g)).strip()
-        check(sorted(got["owned"]) == want and await ps.locator('[data-count="' + g + '"]').inner_text() == card and slot_count == f"5/{totals[g]}" and await ps.evaluate("localStorage.getItem('edfTracker.slotsUsed.' + '%s')" % g) == "1",
-              f"{g}: Add marks exactly the weapons the save owns, in the chosen profile only ({slot_count})")
-        # later the player marks another weapon and earns stars; Undo must take back only what the import did
+        check(sorted(got["owned"]) == want and got["stars"] == in_save and await ps.locator('[data-count="' + g + '"]').inner_text() == card and slot_count == f"5/{totals[g]}"
+              and await ps.evaluate("localStorage.getItem('edfTracker.slotsUsed.' + '%s')" % g) == "1" and counted,
+              f"{g}: Add marks exactly the weapons the save owns, with the star levels the save holds, in the chosen profile only ({slot_count}, {len(got['stars'])} with stars)")
+        # later the player marks another weapon, earns stars on it, and changes the stars of one imported weapon;
+        # Undo must take back only what the import did and leave those later changes (that weapon stays marked)
         later = rows[9]
-        await ps.evaluate("(a) => { const p = JSON.parse(localStorage.getItem(a[0])); p.owned.push(a[1]); p.stars[a[1]] = [2]; localStorage.setItem(a[0], JSON.stringify(p)); }", ["edfTracker.con3." + g, later])
+        changed = [0] * len(in_save.get(rows[7], [1]))
+        changed[0] = 1
+        await ps.evaluate("(a) => { const p = JSON.parse(localStorage.getItem(a[0])); p.owned.push(a[1]); p.stars[a[1]] = [2]; if (a[3]) p.stars[a[2]] = a[4]; localStorage.setItem(a[0], JSON.stringify(p)); }",
+                          ["edfTracker.con3." + g, later, rows[7], has_stars, changed])
         await ps.locator("#saveResult button", has_text="Undo").click()
         got = await stored(g, "con3")
-        check(got["owned"] == [later] and got["stars"] == {later: [2]} and "taken back" in await ps.locator("#saveResult").inner_text() and await ps.locator("#saveResult button").count() == 0,
+        check(sorted(got["owned"]) == sorted([later, rows[7]] if has_stars else [later]) and got["stars"] == ({later: [2], rows[7]: changed} if has_stars else {later: [2]})
+              and "taken back" in await ps.locator("#saveResult").inner_text() and await ps.locator("#saveResult button").count() == 0,
               f"{g}: Undo takes back the import and keeps what was done afterwards")
         # a profile that already has one of the save's weapons and one the save does not own, both fully upgraded
         extra = rows[2]
-        mine = {"owned": [rows[0], extra], "stars": {w: caps[g][w] for w in (rows[0], extra) if caps[g][w]}}
-        full_and_owned = 1 if caps[g][rows[0]] else 0
+        full = {w: [m for _, m in ups_of[g][w]] for w in (rows[0], extra)} if has_stars else {}
+        mine = {"owned": [rows[0], extra], "stars": dict(full)}
         await ps.evaluate("(a) => localStorage.setItem(a[0], JSON.stringify(a[1]))", ["edfTracker.pc2." + g, mine])
         await ps.select_option("#saveSlot", "pc2")
         buttons = await choose(path)
-        check(buttons == ["Add 4", "Match the save", "Cancel"], f"{g}: with other weapons marked, both Add and Match are offered {buttons}")
+        said = " ".join([t.strip() for t in await ps.locator("#saveResult p").all_inner_texts()])
+        check(buttons == ["Add 4", "Match the save", "Cancel"] and ("lowers the stars of 1 weapon" in said) == has_stars, f"{g}: with other weapons marked, both Add and Match are offered {buttons}")
         await ps.locator("#saveResult button", has_text="Add 4").click()
         got = await stored(g, "pc2")
-        check(sorted(got["owned"]) == sorted(want + [extra]) and got["stars"] == mine["stars"], f"{g}: Add never unmarks a weapon and leaves stars alone")
+        after_add = dict(full)
+        after_add.update({w: s for w, s in in_save.items() if w != rows[0]})
+        check(sorted(got["owned"]) == sorted(want + [extra]) and got["stars"] == after_add, f"{g}: Add never unmarks a weapon and never lowers a star level")
         await ps.locator("#saveResult button", has_text="Undo").click()
         got = await stored(g, "pc2")
         check(sorted(got["owned"]) == sorted(mine["owned"]) and got["stars"] == mine["stars"], f"{g}: Undo after Add puts the profile back exactly")
         buttons = await choose(path)
         await ps.locator("#saveResult button", has_text="Match the save").click()
-        await ps.wait_for_timeout(400)  # the count of fully upgraded weapons is redone from the weapon list
+        counted = await maxed_is(g, "pc2", 1 if has_stars else 0)  # the count of fully upgraded weapons is redone from the weapon list
         got = await stored(g, "pc2")
         summary = await ps.evaluate(STORED, "edfTracker.pc2.summary." + g)
-        check(sorted(got["owned"]) == want and got["stars"] == mine["stars"] and summary.get("owned") == 5 and summary.get("maxed") == full_and_owned,
-              f"{g}: Match makes the profile own exactly what the save owns, keeps stars, and recounts fully upgraded weapons ({summary})")
+        after_match = dict(in_save)
+        if has_stars:
+            after_match[extra] = full[extra]  # its stars stay stored; they only count again if it is marked
+        check(sorted(got["owned"]) == want and got["stars"] == after_match and summary.get("owned") == 5 and counted,
+              f"{g}: Match makes the profile own what the save owns, at the save's star levels, and recounts fully upgraded weapons ({summary})")
         await ps.locator("#saveResult button", has_text="Undo").click()
-        await ps.wait_for_timeout(400)
+        counted = await maxed_is(g, "pc2", 2 if has_stars else 0)
         got = await stored(g, "pc2")
         summary = await ps.evaluate(STORED, "edfTracker.pc2.summary." + g)
-        check(sorted(got["owned"]) == sorted(mine["owned"]) and got["stars"] == mine["stars"] and summary.get("maxed") == (2 if caps[g][rows[0]] and caps[g][extra] else full_and_owned),
-              f"{g}: Undo after Match brings back the unmarked weapon ({summary})")
+        check(sorted(got["owned"]) == sorted(mine["owned"]) and got["stars"] == mine["stars"] and counted,
+              f"{g}: Undo after Match brings back the unmarked weapon and the earlier star levels ({summary})")
+        if has_stars:  # with "Also read star levels" unticked only the weapons are imported
+            await ps.select_option("#saveSlot", "con2")
+            await ps.locator("#saveStars").uncheck()
+            buttons = await choose(path)
+            said = " ".join([t.strip() for t in await ps.locator("#saveResult p").all_inner_texts()])
+            await ps.locator("#saveResult button", has_text="Add").click()
+            got = await stored(g, "con2")
+            check("stars" not in said and sorted(got["owned"]) == want and got["stars"] == {}, f"{g}: with star levels unticked only the weapons are marked")
+            await ps.locator("#saveStars").check()
+            buttons = await choose(path)  # the weapons are there now; only stars are left to bring over
+            check(buttons == ["Raise stars", "Cancel"], f"{g}: a profile that has the weapons but not the stars is offered the stars alone {buttons}")
+            await ps.locator("#saveResult button", has_text="Raise stars").click()
+            got = await stored(g, "con2")
+            check(sorted(got["owned"]) == want and got["stars"] == in_save, f"{g}: Raise stars brings the star levels over")
+            await ps.locator("#saveStars").uncheck()
+            await ps.locator("#saveStars").check()
+            check(await ps.locator("#saveResult button", has_text="Undo").count() == 1, f"{g}: ticking the star box after an import leaves its Undo in place")
+            buttons = await choose(path)
+            check(buttons == ["Cancel"] and "already match, weapons and stars" in await ps.locator("#saveResult").inner_text(), f"{g}: importing the same save again finds nothing to do")
+            await ps.select_option("#saveSlot", "con4")
+            buttons = await choose(path)
+            await ps.locator("#saveStars").uncheck()
+            dropped = not await ps.locator("#saveResult").is_visible()
+            await ps.locator("#saveStars").check()
+            check(buttons[0] == "Add 5" and dropped and (await stored(g, "con4"))["owned"] == [], f"{g}: unticking the star box drops a preview that was made with stars")
+            # stars saved by an earlier version above what a stat can really have count as that most
+            inflated = {w: [max(5, m) for _, m in ups_of[g][w]] for w in (rows[0], rows[1])}
+            path_top = await save_file(ps, sdir, g + "-top", g, save_plaintext(g, {0: 1, 1: 1}, stars={0: [10] * 8, 1: [10] * 8}))
+            await ps.evaluate("(a) => localStorage.setItem(a[0], JSON.stringify(a[1]))", ["edfTracker.pc3." + g, {"owned": [rows[0], rows[1]], "stars": inflated}])
+            await ps.select_option("#saveSlot", "pc3")
+            buttons = await choose(path_top)
+            check(any(m < 5 for _, m in ups_of[g][rows[0]]) and buttons == ["Cancel"] and "already match, weapons and stars" in await ps.locator("#saveResult").inner_text(),
+                  f"{g}: stars saved above a stat's real maximum by an earlier version count as that maximum {buttons}")
         # files that must be refused, with nothing changed
         before = await ps.evaluate(ALL)
         good = Path(path).read_bytes()
@@ -867,6 +955,22 @@ async def run(browser) -> None:
         said.append((await ps2.locator("#saveResult p").first.inner_text()).strip())
     check(all("weapon list for reading saves did not load" in s for s in said[:2]) and "owns 5 of 1187" in said[2], f"a weapon list that cannot be fetched gives a plain message, and trying again works {[s[:34] for s in said]}")
     await cs2.close()
+    cs3 = await browser.new_context(viewport=PHONE)
+    ps3 = await cs3.new_page()
+    await ps3.add_init_script("""const realFetch = window.fetch.bind(window);
+        window.fetch = (url, opts) => (String(url).indexOf('edf5-save.json') === -1 ? realFetch(url, opts)
+            : realFetch(url, opts).then((r) => r.json()).then((m) => new Response(JSON.stringify({ game: m.game, rows: m.rows }))));""")
+    await ps3.goto(BASE + "index.html")
+    await ps3.locator("#saveOpen").click()
+    await ps3.wait_for_selector("#saveIn:not([hidden])")
+    await ps3.select_option("#saveGame", "edf5")
+    await ps3.set_input_files("#saveFile", str(sdir / "edf5" / "MAIN.GST"))
+    await ps3.wait_for_function(RESULT)
+    told = await ps3.locator("#saveResult").inner_text()
+    await ps3.locator("#saveResult button", has_text="Add").click()
+    old_map = await ps3.evaluate(STORED, "edfTracker.edf5")  # PC 1, the profile in use, keeps the plain key
+    check("Star levels could not be read this time" in told and len(old_map["owned"]) == 5 and old_map["stars"] == {}, "with a weapon list from before star levels were added, the weapons still import and the player is told the stars were not read")
+    await cs3.close()
 
     # ---- a page that cannot fit one screen scrolls instead of clipping the details header (very narrow phones, wide fonts)
     for (w, h), type_prefs, expect in (((280, 653), {}, True), ((402, 874), {}, False), ((320, 568), {"edf5": {"font": "orbitron", "bold": True, "caps": True}}, None)):

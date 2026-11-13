@@ -22,10 +22,14 @@
 //   • The weapon table is the last part of the file: `rows` entries of `rowSize`
 //     bytes. The first four bytes of an entry are a number whose lowest bit says
 //     "owned" (other bits mark things like "new"). In EDF 5 and 6 eight more
-//     bytes hold star levels; those are not read yet, because their order
-//     differs per weapon type.
+//     bytes hold the weapon's star levels, as plain numbers (5 is five stars).
+//     Which byte belongs to which upgrade differs from weapon to weapon; the
+//     game's own weapon files say so, and tools/build_data.py copies that into
+//     the "stars" list of data/<game>-save.json.
 //   • An entry's position is the weapon's place in the game's own weapon table.
-//     data/<game>-save.json lists the tracker's weapon id for each position.
+//     data/<game>-save.json lists the tracker's weapon id for each position ("rows")
+//     and, for EDF 5 and 6, where each of the weapon's upgrades keeps its star level
+//     among the entry's eight star bytes ("stars", see starsOf below).
 // ============================================================================
 
 const hex = (s) => new Uint8Array(s.match(/../g).map((b) => parseInt(b, 16)));
@@ -86,12 +90,12 @@ const maps = {};
 function loadMap(game) {
   if (!maps[game]) {
     const missing = () => fail('The weapon list for reading saves did not load. Check your connection and try again.');
-    maps[game] = fetch(SAVES[game].map).then((r) => {
+    maps[game] = fetch(SAVES[game].map, { cache: 'no-cache' }).then((r) => { // always the current list, never a stale copy
       if (!r.ok) throw missing();
       return r.json();
     }).then((m) => {
       if (!m || !Array.isArray(m.rows)) throw missing();
-      return m.rows;
+      return { rows: m.rows, stars: Array.isArray(m.stars) ? m.stars : null };
     }, (err) => { throw err && err.readable ? err : missing(); }); // no connection, or something that is not the list
     maps[game].catch(() => { delete maps[game]; }); // allow a retry
   }
@@ -99,13 +103,36 @@ function loadMap(game) {
 }
 
 // What to say about a file that cannot be this game's save, going by its size alone.
+// True for games whose saves hold star levels (EDF 5 and 6).
+export const hasStarLevels = (game) => !!SAVES[game] && SAVES[game].rowSize >= 12;
+
 export function wrongFile(game) {
   const fmt = SAVES[game];
   return fail('That is not the right file: ' + fmt.file + ' for this game is ' + fmt.size.toLocaleString('en-US') + ' bytes. Choose ' + fmt.file + ' from a saveslot folder, and check that the Game above is the right one.');
 }
 
+// Star levels of one weapon, in the tracker's own order of upgrades. `where` comes from the map
+// file: two characters per upgrade, the first saying which of the entry's eight star bytes holds
+// it, the second the most stars that upgrade can have (as one base-36 digit).
+// Returns { now: [stars per upgrade], most: [the most each can have] }.
+function starsOf(plain, at, where) {
+  const now = [];
+  const most = [];
+  for (let j = 0; j + 1 < where.length; j += 2) {
+    const slot = parseInt(where[j], 10);
+    const cap = parseInt(where[j + 1], 36);
+    if (!(slot >= 0 && slot < 8) || !(cap >= 0)) return null; // not a description this version understands
+    now.push(Math.min(cap, plain[at + 4 + slot]));
+    most.push(cap);
+  }
+  return { now, most };
+}
+
 // Reads one save. `data` is the file's contents (ArrayBuffer).
-// Returns { owned: [tracker id, ...], total: number of weapons the save has room for in the tracker's list }.
+// Returns { owned: [tracker id, ...], total: how many weapons the tracker lists for this game,
+//           stars: { id: [stars per upgrade, in the tracker's order] } for the owned weapons, or null
+//           when the game has no stars or their places in the save are not known,
+//           most:  { id: [the most stars each of those upgrades can have] } (null with stars) }.
 // Throws an Error with a message for the player when the file is not a save this can read.
 export async function readSave(game, data) {
   const fmt = SAVES[game];
@@ -131,10 +158,23 @@ export async function readSave(game, data) {
     throw fail('The save file is damaged (its checksum does not match). Nothing was changed.');
   }
   if (fmt.table + fmt.rows * fmt.rowSize > plain.length) throw fail('The save file is shorter than expected. Nothing was changed.');
-  const ids = await loadMap(game);
+  const map = await loadMap(game);
+  const ids = map.rows;
+  const places = fmt.rowSize >= 12 ? map.stars : null;
   const owned = [];
+  const stars = places ? {} : null;
+  const most = places ? {} : null;
   for (let i = 0; i < fmt.rows && i < ids.length; i++) {
-    if (typeof ids[i] === 'string' && (view.getUint32(fmt.table + i * fmt.rowSize, true) & 1)) owned.push(ids[i]);
+    const at = fmt.table + i * fmt.rowSize;
+    if (typeof ids[i] !== 'string' || !(view.getUint32(at, true) & 1)) continue;
+    owned.push(ids[i]);
+    if (places && typeof places[i] === 'string' && places[i]) {
+      const s = starsOf(plain, at, places[i]);
+      if (s) {
+        stars[ids[i]] = s.now;
+        most[ids[i]] = s.most;
+      }
+    }
   }
-  return { owned, total: ids.filter((id) => typeof id === 'string').length };
+  return { owned, total: ids.filter((id) => typeof id === 'string').length, stars, most };
 }

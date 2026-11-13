@@ -175,6 +175,7 @@ if (!hasSlots) { // mismatched files during an update: hide a profile list that 
 // Marks the weapons owned by reading the player's own PC save. The reading is done by
 // js/savefile.js, which is only loaded when this panel is opened. Nothing is saved until
 // the player has seen what would change and picked Add or Match; Undo takes it back.
+// In EDF 5 and 6 the save also holds each weapon's star levels, which are read too unless unticked.
 // (The button stays hidden when this script is paired with a previous index.html or store.js.)
 const saveIn = $('#saveIn');
 const saveOpen = $('#saveOpen');
@@ -182,7 +183,8 @@ const hasSaveIn = !!(store.SLOTS && saveIn && saveOpen && $('#saveGame') && $('#
   $('#saveClose') && $('#savePick') && $('#saveCopy'));
 let saveLib = null;     // promise for js/savefile.js, once asked for
 let saveLibNow = null;  // the module itself, once loaded
-let saveUndo = null;    // { game, slot, added: [id], removed: [id] }: what the last import changed
+let saveUndo = null;    // what the last import changed: { game, slot, added: [id], removed: [id], stars: { id: { was, now } }, after: { id: stars } }
+let savePreview = false; // true while the result area shows a preview with Add / Match buttons
 let saveTurn = 0;       // goes up whenever the panel's question changes, so an answer that arrives late is dropped
 const weapons = (n) => n + (n === 1 ? ' weapon' : ' weapons');
 function saveLibrary() {
@@ -240,6 +242,8 @@ function showSaveTarget(fresh) {
   list.dataset.game = game;
   $('#savePath').textContent = lib.SAVES[game].where;
   $('#saveName').textContent = lib.SAVES[game].file;
+  if ($('#saveStarsRow')) $('#saveStarsRow').hidden = !(lib.SAVES[game].rowSize >= 12); // EDF 4.1 has no star levels
+  savePreview = false;
 }
 function refreshAfterSave() {
   showProfiles();
@@ -270,36 +274,86 @@ async function recountMaxed(game, slot) {
   store.saveProgress(game, p, { owned: p.owned.size, maxed, total: s.total }, slot);
   refreshAfterSave();
 }
-// Change one profile so that it owns what the save owns. `match` also unmarks weapons the save
-// does not own. Worked out from the profile as it is now, not as it was when the preview was shown.
-// Stars are never changed.
-function applySave(game, slot, savedIds, match) {
-  const p = store.loadProgress(game, slot);
-  const inSave = new Set(savedIds);
-  const added = savedIds.filter((id) => !p.owned.has(id));
+// Star levels, compared as lists of the same length (a weapon without saved stars counts as all zero).
+const starList = (list, length) => Array.from({ length }, (_, i) => (list && list[i]) | 0);
+const sameStars = (a, b) => a.length === b.length && a.every((n, i) => n === b[i]);
+// What importing `found` (from readSave) into a profile would change, worked out from the profile as it
+// is right now. `match` makes the profile the same as the save; otherwise weapons are only added and
+// stars only raised. `withStars` is off when the player unticked "Also read star levels".
+function planSave(p, found, match, withStars) {
+  const inSave = new Set(found.owned);
+  const added = found.owned.filter((id) => !p.owned.has(id));
   const removed = match ? Array.from(p.owned).filter((id) => !inSave.has(id)) : [];
-  added.forEach((id) => p.owned.add(id));
-  removed.forEach((id) => p.owned.delete(id));
+  const stars = {}; // id -> { was: list or null, now: list }
+  let up = 0;
+  let down = 0;
+  if (withStars && found.stars) {
+    found.owned.forEach((id) => {
+      const want = found.stars[id];
+      if (!want || !want.length) return;
+      // What is saved here counts up to the most each upgrade can have (older versions allowed more for some).
+      const caps = (found.most && found.most[id]) || [];
+      const have = starList(p.stars[id], want.length).map((n, i) => (caps[i] >= 0 ? Math.min(n, caps[i]) : n));
+      const now = match ? want.slice() : want.map((n, i) => Math.max(n, have[i]));
+      if (sameStars(now, have)) return;
+      stars[id] = { was: p.stars[id] ? p.stars[id].slice() : null, now };
+      if (now.some((n, i) => n > have[i])) up++;
+      if (now.some((n, i) => n < have[i])) down++;
+    });
+  }
+  return { added, removed, stars, up, down };
+}
+// Change one profile the way planSave describes, and remember exactly what was changed for Undo.
+function applySave(game, slot, found, match, withStars) {
+  const p = store.loadProgress(game, slot);
+  const plan = planSave(p, found, match, withStars);
+  plan.added.forEach((id) => p.owned.add(id));
+  plan.removed.forEach((id) => p.owned.delete(id));
+  Object.keys(plan.stars).forEach((id) => {
+    const now = plan.stars[id].now;
+    if (now.some((n) => n > 0)) p.stars[id] = now; else delete p.stars[id];
+  });
   const s = store.loadSummary(game, slot);
   if (!store.saveProgress(game, p, { owned: p.owned.size, maxed: Math.min(s.maxed, p.owned.size), total: s.total }, slot)) {
     saveMessage(['Progress could not be saved on this device. Storage is full or blocked.']);
     return;
   }
   if (p.owned.size && store.noteSlotUsed) store.noteSlotUsed(game, slot);
-  saveUndo = { game, slot, added, removed };
-  saveMessage([(added.length ? 'Marked ' + weapons(added.length) : 'Nothing to mark') + (removed.length ? ' and unmarked ' + weapons(removed.length) : '') + ' in ' + saveTargetName(game, slot) + '.'],
-    added.length || removed.length ? [{ label: 'Undo', run: undoSave }] : []);
+  const starred = Object.keys(plan.stars).length;
+  const did = [];
+  if (plan.added.length) did.push('marked ' + weapons(plan.added.length));
+  if (plan.removed.length) did.push('unmarked ' + weapons(plan.removed.length));
+  if (starred) did.push('set the stars of ' + weapons(starred));
+  // "after" is how the added weapons' stars stand now, so Undo can tell if the player has upgraded one since.
+  const after = {};
+  plan.added.forEach((id) => { after[id] = p.stars[id] ? p.stars[id].slice() : null; });
+  saveUndo = did.length ? { game, slot, added: plan.added, removed: plan.removed, stars: plan.stars, after } : null;
+  savePreview = false;
+  const text = did.length ? did.join(', ').replace(/^./, (c) => c.toUpperCase()) : 'Nothing needed changing';
+  saveMessage([text + ' in ' + saveTargetName(game, slot) + '.'], did.length ? [{ label: 'Undo', run: undoSave }] : []);
   refreshAfterSave();
   recountMaxed(game, slot);
 }
-// Takes back exactly what the last import changed. Anything marked, unmarked or upgraded since then stays.
+// Takes back exactly what the last import changed. Anything marked, unmarked or upgraded since then stays:
+// a weapon's stars are only put back if they are still what the import left, and a weapon the import
+// marked stays marked if the player has changed its stars since.
 function undoSave() {
   const u = saveUndo;
   if (!u) return;
   saveUndo = null;
+  savePreview = false;
   const p = store.loadProgress(u.game, u.slot);
-  u.added.forEach((id) => p.owned.delete(id));
+  const text = (list) => JSON.stringify(list || []).replace(/^\[(0,)*0?\]$/, '[]'); // no stars and all zero are the same
+  u.added.forEach((id) => {
+    if (u.after && text(p.stars[id]) !== text(u.after[id])) return; // upgraded since the import: it stays
+    p.owned.delete(id);
+  });
   u.removed.forEach((id) => p.owned.add(id));
+  Object.keys(u.stars || {}).forEach((id) => {
+    const change = u.stars[id];
+    if (!sameStars(starList(p.stars[id], change.now.length), change.now)) return; // changed again since the import
+    if (change.was) p.stars[id] = change.was; else delete p.stars[id];
+  });
   const s = store.loadSummary(u.game, u.slot);
   if (!store.saveProgress(u.game, p, { owned: p.owned.size, maxed: Math.min(s.maxed, p.owned.size), total: s.total }, u.slot)) {
     saveMessage(['Progress could not be saved on this device. Storage is full or blocked.']);
@@ -316,6 +370,7 @@ async function previewSave(file) {
   if (!file || store.GAMES.indexOf(game) === -1 || store.SLOTS.indexOf(slot) === -1) return;
   const turn = ++saveTurn;
   saveUndo = null;
+  savePreview = false;
   saveMessage(['Reading the save…']);
   try {
     const lib = await saveLibrary();
@@ -339,27 +394,36 @@ async function previewSave(file) {
     }
     const found = await lib.readSave(game, data);
     if (turn !== saveTurn) return; // the game, profile or file was changed while this one was being read
-    const now = store.loadProgress(game, slot).owned;
-    const inSave = new Set(found.owned);
-    const add = found.owned.filter((id) => !now.has(id)).length;
-    const remove = Array.from(now).filter((id) => !inSave.has(id)).length;
-    const lines = ['This save owns ' + found.owned.length + ' of ' + found.total + ' weapons. ' + saveTargetName(game, slot) + ' has ' + now.size + ' marked.'];
+    const withStars = !!(found.stars && $('#saveStars') && $('#saveStars').checked);
+    const p = store.loadProgress(game, slot);
+    const add = planSave(p, found, false, withStars);
+    const match = planSave(p, found, true, withStars);
+    const lines = ['This save owns ' + found.owned.length + ' of ' + found.total + ' weapons. ' + saveTargetName(game, slot) + ' has ' + p.owned.size + ' marked.'];
     if (switched) lines.unshift('This is an ' + store.GAME_NAMES[game] + ' save, so Game was changed to ' + store.GAME_NAMES[game] + '.');
     const buttons = [];
-    if (!add && !remove) {
-      lines.push('They already match, so there is nothing to import.');
+    const adds = [];
+    if (add.added.length) adds.push('marks the ' + weapons(add.added.length) + ' the save owns that ' + (add.added.length === 1 ? 'is' : 'are') + ' not marked yet');
+    if (add.up) adds.push('raises the stars of ' + weapons(add.up));
+    const more = [];
+    if (match.removed.length) more.push('unmarks the ' + weapons(match.removed.length) + ' marked here that this save does not own');
+    if (match.down) more.push('lowers the stars of ' + weapons(match.down) + ' to the save\'s levels');
+    const noStars = !found.stars && lib.hasStarLevels && lib.hasStarLevels(game) && $('#saveStars') && $('#saveStars').checked;
+    if (!adds.length && !more.length) {
+      lines.push(withStars ? 'They already match, weapons and stars, so there is nothing to import.' : 'They already match, so there is nothing to import.');
     } else {
-      if (add) {
-        lines.push('Add: marks the ' + weapons(add) + ' the save owns that ' + (add === 1 ? 'is' : 'are') + ' not marked yet.');
-        buttons.push({ label: 'Add ' + add, primary: true, run: () => applySave(game, slot, found.owned, false) });
+      if (adds.length) {
+        lines.push('Add: ' + adds.join(' and ') + '. Nothing is unmarked' + (withStars ? ' or lowered.' : '.'));
+        buttons.push({ label: add.added.length ? 'Add ' + add.added.length : 'Raise stars', primary: true, run: () => applySave(game, slot, found, false, withStars) });
       }
-      if (remove) {
-        lines.push('Match: ' + (add ? 'does that and also ' : '') + 'unmarks the ' + weapons(remove) + ' marked here that this save does not own.');
-        buttons.push({ label: 'Match the save', primary: !add, run: () => applySave(game, slot, found.owned, true) });
+      if (more.length) {
+        lines.push('Match: ' + (adds.length ? 'does that and also ' : '') + more.join(' and ') + '.');
+        buttons.push({ label: 'Match the save', primary: !adds.length, run: () => applySave(game, slot, found, true, withStars) });
       }
     }
-    buttons.push({ label: 'Cancel', run: () => saveMessage([]) });
+    if (noStars) lines.push('Star levels could not be read this time. Reload this page and choose the file again to bring them over.');
+    buttons.push({ label: 'Cancel', run: () => { savePreview = false; saveMessage([]); } });
     saveMessage(lines, buttons);
+    savePreview = true;
   } catch (err) {
     if (turn !== saveTurn) return;
     saveMessage([err && err.readable ? err.message : 'The save could not be read.']);
@@ -404,6 +468,13 @@ if (hasSaveIn) {
   $('#saveClose').addEventListener('click', closeSave);
   $('#saveGame').addEventListener('change', () => { saveTurn++; saveUndo = null; showSaveTarget(true); saveMessage([]); });
   $('#saveSlot').addEventListener('change', () => { saveTurn++; saveUndo = null; saveMessage([]); });
+  if ($('#saveStars')) {
+    $('#saveStars').addEventListener('change', () => { // a preview made for the other choice is dropped; a finished import keeps its Undo
+      if (!savePreview) return;
+      savePreview = false;
+      saveMessage([]);
+    });
+  }
   $('#savePick').addEventListener('click', () => $('#saveFile').click());
   $('#saveFile').addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];

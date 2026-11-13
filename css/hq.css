@@ -145,6 +145,8 @@ a { color: #e9e6df; }
 .savein__title:focus { outline: none; }
 .savein__title { margin: 0; font-family: 'Oxanium', sans-serif; font-size: calc(17px * var(--ts, 1)); font-weight: 600; letter-spacing: 1px; }
 .savein__text { margin: 0; font-size: calc(15px * var(--ts, 1)); line-height: 1.3; color: #d6d3cb; }
+.savein__check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: calc(15px * var(--ts, 1)); cursor: pointer; }
+.savein__check input { flex: none; width: 24px; height: 24px; margin: 0; accent-color: #e9e6df; cursor: pointer; }
 .savein__path { display: flex; align-items: stretch; gap: 4px; }
 .savein__path code { flex: 1 1 auto; min-width: 0; padding: 8px; display: flex; align-items: center; overflow-wrap: anywhere; background-color: #0c0d10; border: 1px solid #5d5f66; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(12px * var(--ts, 1)); -webkit-user-select: all; user-select: all; }
 .savein__path button { flex: none; min-width: 64px; min-height: 44px; padding: 0 8px; background-color: transparent; color: #e9e6df; border: 1px solid #5d5f66; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(13px * var(--ts, 1)); }

@@ -155,7 +155,7 @@
 
     <section class="savein" id="saveIn" aria-labelledby="saveTitle" hidden>
       <h2 class="savein__title" id="saveTitle" tabindex="-1">Import from game save</h2>
-      <p class="savein__text">Marks the weapons you own by reading your own save file from the PC (Steam) version. The file is read on this device only; nothing is uploaded. Star levels are not read yet.</p>
+      <p class="savein__text">Marks the weapons you own, and in EDF 5 and 6 their star levels, by reading your own save file from the PC (Steam) version. The file is read on this device only; nothing is uploaded.</p>
       <div class="setting">
         <label class="setting__label setting__label--sub" for="saveGame">Game</label>
         <select class="select" id="saveGame"></select>
@@ -164,6 +164,7 @@
         <label class="setting__label setting__label--sub" for="saveSlot">Into profile</label>
         <select class="select" id="saveSlot"></select>
       </div>
+      <label class="savein__check" id="saveStarsRow"><input type="checkbox" id="saveStars" checked> <span>Also read star levels</span></label>
       <p class="savein__text">Choose <b id="saveName">MAIN.GST</b> from a save slot's folder (<b>saveslot00</b> is the first slot). The saves are in the folder with your Steam number under:</p>
       <div class="savein__path">
         <code id="savePath"></code>

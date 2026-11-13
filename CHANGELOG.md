@@ -7,6 +7,19 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.8.0 – 2026-11-13
+### Added
+- **Import from game save reads star levels** (EDF 5 and 6). **Add** raises stars and never lowers one. **Match the save** sets them to the save's levels. **Undo** puts them back, except on a weapon whose stars you changed again afterwards; such a weapon also stays marked. Untick "Also read star levels" to bring over the weapons only.
+- A profile that already has a save's weapons but not its stars is offered **Raise stars**.
+
+### Fixed
+- **Stats that stop below five stars.** Some upgrades end at one to four stars in the games, but the tracker showed five for them, so a weapon that was finished in the game still looked unfinished here: 269 stats on 262 weapons in EDF 5, and 334 stats on 322 weapons in EDF 6. They now show the games' own maximum. Stars saved above a new maximum count as that maximum; nothing else about saved progress changes.
+
+### Notes
+- The star maximums and the place of each stat's stars in a save come from the games' own weapon files (`tools/game-stars/`), and were checked against real saves: every one of 2,380 star values fits, and 623 sit exactly at their maximum.
+- 45 weapons in EDF 5 and 60 in EDF 6 (Fencer melee weapons among them) have one more upgradable stat in the game than edf-calc and the tracker list. That stat is not shown or imported yet.
+- `tools/build_data.py` now also needs `tools/game-stars/`, and writes the "stars" lists of `data/edf5-save.json` and `data/edf6-save.json`.
+
 ## v1.7.0 – 2026-11-13
 ### Added
 - **Import from game save** (HQ, PC version on Steam): choose your `MAIN.GST` and the tracker marks the weapons that save owns, for EDF 4.1, 5 and 6. The file is read on the device and never uploaded.
