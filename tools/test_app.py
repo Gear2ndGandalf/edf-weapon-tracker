@@ -9,7 +9,12 @@ The script serves the repository on a local port, drives every control and
 checks layout at several screen sizes. It exits with status 1 on any failure.
 """
 import asyncio
+import base64
+import hashlib
 import json
+import re
+import struct
+import zlib
 import os
 import subprocess
 import sys
@@ -38,6 +43,63 @@ OLD_CHECKLIST = {
     "airraiderSave": {"guidance": 11, "calling-support": 50, "support-equip": 32, "limpet-guns": 31, "stationary": 34, "special-weapons": 24, "tanks": 24, "ground-vehicles": 23, "helicopters": 15, "power-suits": 33},
     "fencerSave": {"cc-strikers": 24, "cc-piercers": 26, "shields": 23, "automatic-artillery": 32, "artillery": 35, "missile-launchers": 23},
 }
+# The games' own save files (PC, Steam), as js/savefile.js reads them. This is written out a second
+# time here on purpose: the sample saves below are built from THIS description, and the keys of
+# EDF 5 and 6 are worked out from the recipe, so a mistake in savefile.js cannot hide by being
+# copied into its own test. Each layout was checked against real saves of that game.
+def _md5_utf16(text: str) -> bytes:
+    return hashlib.md5(text.encode("utf-16-le")).digest()
+
+
+SAVE_LAYOUT = {
+    "edf41": {"size": 16504, "format": 1, "body": 0x18, "table": 0x2078, "row": 4, "sum": "crc32",
+              "key": bytes.fromhex("DBD394C9E09C52CE77467D6A9F913C81"), "counter": bytes.fromhex("F5A9402744EE8C270B2E6D97A9C430CA")},
+    "edf5": {"size": 56584, "format": 3, "body": 0x20, "table": 0x7D08, "row": 12, "sum": "crc32c-inverted",
+             "key": _md5_utf16("edf5MAIN.GST.sav") + b"Edf5.*_Steam_Ver", "counter": _md5_utf16("edf5MAIN.GST.stm")},
+    "edf6": {"size": 56572, "format": 3, "body": 0x14, "table": 0x7CFC, "row": 12, "sum": "crc32c-inverted",
+             "key": _md5_utf16("edf6MAIN.GST.sav") + b"Edf5.*_Steam_Ver", "counter": _md5_utf16("edf6MAIN.GST.stm")},
+}
+
+
+def _crc32c(data: bytes) -> int:
+    crc = 0xFFFFFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0x82F63B78 if crc & 1 else crc >> 1
+    return crc ^ 0xFFFFFFFF
+
+
+def save_plaintext(game: str, conds: dict, fmt=None, fix_sum: bool = True) -> bytes:
+    """A decoded save: header, zeroes, and a weapon table whose entry `row` starts with the number conds[row]."""
+    lay = SAVE_LAYOUT[game]
+    plain = bytearray(lay["size"])
+    plain[0:4] = b"MDB0"
+    struct.pack_into("<II", plain, 4, lay["format"] if fmt is None else fmt, lay["size"] - lay["body"])
+    for row, cond in conds.items():
+        struct.pack_into("<I", plain, lay["table"] + row * lay["row"], cond)
+    body = bytes(plain[lay["body"]:])
+    total = zlib.crc32(body) if lay["sum"] == "crc32" else _crc32c(body) ^ 0xFFFFFFFF
+    struct.pack_into("<I", plain, 12, (total if fix_sum else total ^ 1) & 0xFFFFFFFF)
+    return bytes(plain)
+
+
+# Encrypts in the browser (AES in counter mode) with the key and counter worked out above.
+ENCRYPT = """async ([keyB64, counterB64, dataB64]) => { const b = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey('raw', b(keyB64), { name: 'AES-CTR' }, false, ['encrypt']);
+    const out = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CTR', counter: b(counterB64), length: 128 }, key, b(dataB64)));
+    let s = ''; for (let i = 0; i < out.length; i += 8192) s += String.fromCharCode.apply(null, out.subarray(i, i + 8192)); return btoa(s); }"""
+
+
+async def save_file(page, folder: Path, name: str, game: str, plain: bytes) -> str:
+    lay = SAVE_LAYOUT[game]
+    enc = await page.evaluate(ENCRYPT, [base64.b64encode(lay["key"]).decode(), base64.b64encode(lay["counter"]).decode(), base64.b64encode(plain).decode()])
+    path = folder / name / "MAIN.GST"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(base64.b64decode(enc))
+    return str(path)
+
+
 # Moves the HQ text-size slider the way a drag does: set the value, then fire "input".
 SET_TEXT = "(v) => { const r = document.querySelector('#textRange'); r.value = String(v); r.dispatchEvent(new Event('input', { bubbles: true })); }"
 
@@ -651,6 +713,160 @@ async def run(browser) -> None:
         return row.querySelector('.meter__track').getBoundingClientRect().left - row.querySelector('.row__lv').getBoundingClientRect().right; }""")
     check(gap >= -0.5, f"at 60% text the star meter does not run into the level ({gap:.1f}px apart)")
     await c.close()
+
+    # ---- import from the game's own save file (PC): owned weapons, for all three games
+    js_src = (ROOT / "js" / "savefile.js").read_text(encoding="utf-8")
+    js_keys = {g: re.search(g + r": \{.*?key: hex\('([0-9a-f]+)'\),\s*counter: hex\('([0-9a-f]+)'\)", js_src, re.S).groups() for g in SAVE_LAYOUT}
+    check(all(js_keys[g] == (SAVE_LAYOUT[g]["key"].hex(), SAVE_LAYOUT[g]["counter"].hex()) for g in SAVE_LAYOUT), "the save keys in savefile.js are the ones the documented recipe gives")
+    totals = {"edf41": 827, "edf5": 1187, "edf6": 1564}
+    # Which weapon sits at a few positions of each game's save, as found in real saves (owned starter weapons,
+    # weapons seen in a young save), and a fingerprint of each whole list so that it cannot change unnoticed.
+    KNOWN = {
+        "edf41": ({29: "Weapon028", 66: "Weapon064", 232: "Weapon213", 410: "Weapon384", 608: "Weapon569", 739: "eVehicle_Tank_DcZero"}, "aff6eeef9757de2756ee3c76d509ba28f3a8904491c02750cdb35aafb6ecb1c6"),
+        "edf5": ({0: "AssultRifle01", 104: "RocketLauncher01", 327: "pRapier01", 613: "hPileBanker01", 799: "eWeapon001", 979: "eLifeBender"}, "410c4ddac5e689025ddf67777e5d120d5a2c4f6e621e69b3d4da1303acfc9a3b"),
+        "edf6": ({0: "AssultRifle01", 1: "aWeapon001", 111: "aWeapon110", 392: "pWeapon008", 694: "hWeapon004", 925: "eRequestMortar02", 1563: "INDLC_holo_decoy_irys"}, "f352f1e4640f68d61f04379a37c5cfb16aa58b24881fd4dc0267bf59e5afe42f"),
+    }
+    maps, caps = {}, {}
+    for g in SAVE_LAYOUT:
+        rows = json.loads((ROOT / "data" / f"{g}-save.json").read_text(encoding="utf-8"))["rows"]
+        data = json.loads((ROOT / "data" / f"{g}.json").read_text(encoding="utf-8"))
+        items = [it for c in data["classes"] for k in c["cats"] for it in k["items"]]
+        maps[g] = rows
+        caps[g] = {it[0]: [u[1] for u in (it[4] if len(it) > 4 else [])] for it in items}
+        spots, print_ = KNOWN[g]
+        check(len(rows) == totals[g] and len(set(rows)) == len(rows) and set(rows) == set(caps[g]) and all(rows[i] == w for i, w in spots.items())
+              and hashlib.sha256(json.dumps(rows, separators=(",", ":")).encode()).hexdigest() == print_,
+              f"{g}: the list of save positions names every one of the {totals[g]} weapons once, in the order found in real saves")
+    cs = await browser.new_context(viewport=PHONE)
+    ps = await cs.new_page()
+    await watch(ps, errors, external)
+    await ps.goto(BASE + "index.html")
+    sdir = Path(tempfile.mkdtemp())
+    check(await ps.locator("#saveOpen").is_visible() and not await ps.locator("#saveIn").is_visible(), "HQ has an Import from game save button; its panel starts closed")
+    await ps.locator("#saveOpen").click()
+    await ps.wait_for_selector("#saveIn:not([hidden])")
+    check(await ps.evaluate("[...document.querySelector('#saveGame').options].map((o) => o.value)") == ["edf41", "edf5", "edf6"] and await ps.locator("#saveSlot option").count() == 8
+          and await ps.evaluate("document.activeElement === document.querySelector('#saveTitle')"), "the panel offers all three games and the eight profiles, and takes the keyboard focus")
+    RESULT = "!document.querySelector('#saveResult').hidden && !/Reading/.test(document.querySelector('#saveResult').textContent)"
+    STORED = "(k) => JSON.parse(localStorage.getItem(k) || '{\"owned\":[],\"stars\":{}}')"
+    ALL = "JSON.stringify(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)]))"
+
+    async def stored(g, slot):
+        return await ps.evaluate(STORED, "edfTracker." + slot + "." + g)
+
+    async def choose(path):
+        await ps.set_input_files("#saveFile", path)
+        await ps.wait_for_function(RESULT)
+        return [t.strip() for t in await ps.locator("#saveResult button").all_inner_texts()]
+
+    for g in ("edf41", "edf5", "edf6"):
+        rows = maps[g]
+        last = len(rows) - 1
+        # owned in several ways (lowest bit set), one entry that is not owned (2), and one past the tracker's list
+        conds = {0: 1, 1: 3, 2: 2, 7: 5, 40: 11, last: 9, len(rows) + 3: 1}
+        want = sorted([rows[0], rows[1], rows[7], rows[40], rows[last]])
+        path = await save_file(ps, sdir, g, g, save_plaintext(g, conds))
+        card = await ps.locator('[data-count="' + g + '"]').inner_text()
+        await ps.select_option("#saveGame", g)
+        await ps.select_option("#saveSlot", "con3")
+        buttons = await choose(path)
+        said = (await ps.locator("#saveResult p").first.inner_text()).strip()
+        check(f"owns 5 of {totals[g]} weapons" in said and buttons == ["Add 5", "Cancel"] and (await stored(g, "con3"))["owned"] == [], f"{g}: the save is read and shown before anything changes ({said})")
+        await ps.locator("#saveResult button", has_text="Add").click()
+        got = await stored(g, "con3")
+        slot_count = (await ps.evaluate("(g) => { document.querySelector('#segGame button[data-game=' + g + ']').click(); return document.querySelector('#segProfile .slot[data-slot=con3] .slot__count').textContent; }", g)).strip()
+        check(sorted(got["owned"]) == want and await ps.locator('[data-count="' + g + '"]').inner_text() == card and slot_count == f"5/{totals[g]}" and await ps.evaluate("localStorage.getItem('edfTracker.slotsUsed.' + '%s')" % g) == "1",
+              f"{g}: Add marks exactly the weapons the save owns, in the chosen profile only ({slot_count})")
+        # later the player marks another weapon and earns stars; Undo must take back only what the import did
+        later = rows[9]
+        await ps.evaluate("(a) => { const p = JSON.parse(localStorage.getItem(a[0])); p.owned.push(a[1]); p.stars[a[1]] = [2]; localStorage.setItem(a[0], JSON.stringify(p)); }", ["edfTracker.con3." + g, later])
+        await ps.locator("#saveResult button", has_text="Undo").click()
+        got = await stored(g, "con3")
+        check(got["owned"] == [later] and got["stars"] == {later: [2]} and "taken back" in await ps.locator("#saveResult").inner_text() and await ps.locator("#saveResult button").count() == 0,
+              f"{g}: Undo takes back the import and keeps what was done afterwards")
+        # a profile that already has one of the save's weapons and one the save does not own, both fully upgraded
+        extra = rows[2]
+        mine = {"owned": [rows[0], extra], "stars": {w: caps[g][w] for w in (rows[0], extra) if caps[g][w]}}
+        full_and_owned = 1 if caps[g][rows[0]] else 0
+        await ps.evaluate("(a) => localStorage.setItem(a[0], JSON.stringify(a[1]))", ["edfTracker.pc2." + g, mine])
+        await ps.select_option("#saveSlot", "pc2")
+        buttons = await choose(path)
+        check(buttons == ["Add 4", "Match the save", "Cancel"], f"{g}: with other weapons marked, both Add and Match are offered {buttons}")
+        await ps.locator("#saveResult button", has_text="Add 4").click()
+        got = await stored(g, "pc2")
+        check(sorted(got["owned"]) == sorted(want + [extra]) and got["stars"] == mine["stars"], f"{g}: Add never unmarks a weapon and leaves stars alone")
+        await ps.locator("#saveResult button", has_text="Undo").click()
+        got = await stored(g, "pc2")
+        check(sorted(got["owned"]) == sorted(mine["owned"]) and got["stars"] == mine["stars"], f"{g}: Undo after Add puts the profile back exactly")
+        buttons = await choose(path)
+        await ps.locator("#saveResult button", has_text="Match the save").click()
+        await ps.wait_for_timeout(400)  # the count of fully upgraded weapons is redone from the weapon list
+        got = await stored(g, "pc2")
+        summary = await ps.evaluate(STORED, "edfTracker.pc2.summary." + g)
+        check(sorted(got["owned"]) == want and got["stars"] == mine["stars"] and summary.get("owned") == 5 and summary.get("maxed") == full_and_owned,
+              f"{g}: Match makes the profile own exactly what the save owns, keeps stars, and recounts fully upgraded weapons ({summary})")
+        await ps.locator("#saveResult button", has_text="Undo").click()
+        await ps.wait_for_timeout(400)
+        got = await stored(g, "pc2")
+        summary = await ps.evaluate(STORED, "edfTracker.pc2.summary." + g)
+        check(sorted(got["owned"]) == sorted(mine["owned"]) and got["stars"] == mine["stars"] and summary.get("maxed") == (2 if caps[g][rows[0]] and caps[g][extra] else full_and_owned),
+              f"{g}: Undo after Match brings back the unmarked weapon ({summary})")
+        # files that must be refused, with nothing changed
+        before = await ps.evaluate(ALL)
+        good = Path(path).read_bytes()
+        bad = {
+            "another file of the same size": (bytes(len(good)), "is not MAIN.GST from this game"),
+            "a damaged save": (Path(await save_file(ps, sdir, g + "-sum", g, save_plaintext(g, conds, fix_sum=False))).read_bytes(), "damaged"),
+            "a save in a newer format": (Path(await save_file(ps, sdir, g + "-fmt", g, save_plaintext(g, conds, fmt=9))).read_bytes(), "format the tracker does not know"),
+            "a cut-off file": (good[:-16], "not the right file"),
+            "an empty file": (b"", "not the right file"),
+        }
+        refused = {}
+        for what, (blob, expect) in bad.items():
+            p_bad = sdir / (g + "-bad") / "MAIN.GST"
+            p_bad.parent.mkdir(exist_ok=True)
+            p_bad.write_bytes(blob)
+            await choose(str(p_bad))
+            refused[what] = expect in await ps.locator("#saveResult").inner_text() and await ps.locator("#saveResult button").count() == 0
+        check(all(refused.values()) and await ps.evaluate(ALL) == before, f"{g}: files that are not a readable save are refused and nothing changes {refused}")
+    # a save picked while another game is chosen is recognised by its size
+    await ps.select_option("#saveGame", "edf41")
+    await ps.select_option("#saveSlot", "con4")
+    await choose(str(sdir / "edf6" / "MAIN.GST"))
+    check(await ps.locator("#saveGame").input_value() == "edf6" and await ps.locator("#saveSlot").input_value() == "con4" and "Game was changed to EDF 6" in await ps.locator("#saveResult").inner_text()
+          and "owns 5 of 1564" in await ps.locator("#saveResult").inner_text(), "a save chosen under the wrong game switches the Game and keeps the chosen profile")
+    # changing the profile while a preview is showing clears it, so its buttons cannot act on another profile
+    await ps.select_option("#saveSlot", "pc3")
+    check(not await ps.locator("#saveResult").is_visible(), "changing the profile clears a preview that was for another profile")
+    # the list of profiles in the panel follows a rename and a switch made while it is open
+    ps.once("dialog", lambda d: asyncio.ensure_future(d.accept("Storm 1")))
+    await ps.evaluate("document.querySelector('#segGame button[data-game=edf6]').click()")
+    await ps.evaluate("document.querySelector('#segProfile .slot[data-slot=pc3]').click()")
+    await ps.evaluate("document.querySelector('#renameProfile').click()")
+    check(await ps.evaluate("[...document.querySelector('#saveSlot').options].map((o) => o.textContent)[2]") == "Storm 1 (in use)", "the panel's profile list follows a rename and a switch")
+    await ps.locator("#saveClose").focus()
+    await ps.keyboard.press("Enter")  # by keyboard: Safari does not give a clicked button the focus
+    check(not await ps.locator("#saveIn").is_visible() and await ps.locator("#saveOpen").get_attribute("aria-expanded") == "false" and await ps.evaluate("document.activeElement === document.querySelector('#saveOpen')"),
+          "the panel closes again and hands the keyboard focus back to its button")
+    await cs.close()
+    # when the weapon list cannot be fetched the player is told plainly, in the app's own words, and can try again
+    cs2 = await browser.new_context(viewport=PHONE)
+    ps2 = await cs2.new_page()
+    await ps2.add_init_script("""window.__list = 'gone'; const realFetch = window.fetch.bind(window);
+        window.fetch = (url, opts) => { if (String(url).indexOf('edf5-save.json') === -1 || window.__list === 'ok') return realFetch(url, opts);
+            return window.__list === 'gone' ? Promise.reject(new TypeError('Failed to fetch')) : Promise.resolve(new Response('<html>not found</html>', { status: 200 })); };""")
+    await ps2.goto(BASE + "index.html")
+    await ps2.locator("#saveOpen").click()
+    await ps2.wait_for_selector("#saveIn:not([hidden])")
+    await ps2.select_option("#saveGame", "edf5")
+    said = []
+    for mode in ("gone", "html", "ok"):
+        await ps2.evaluate("(m) => { window.__list = m; }", mode)
+        await ps2.set_input_files("#saveFile", str(sdir / "edf5" / "MAIN.GST"))
+        await ps2.wait_for_function(RESULT)
+        said.append((await ps2.locator("#saveResult p").first.inner_text()).strip())
+    check(all("weapon list for reading saves did not load" in s for s in said[:2]) and "owns 5 of 1187" in said[2], f"a weapon list that cannot be fetched gives a plain message, and trying again works {[s[:34] for s in said]}")
+    await cs2.close()
 
     # ---- a page that cannot fit one screen scrolls instead of clipping the details header (very narrow phones, wide fonts)
     for (w, h), type_prefs, expect in (((280, 653), {}, True), ((402, 874), {}, False), ((320, 568), {"edf5": {"font": "orbitron", "bold": True, "caps": True}}, None)):

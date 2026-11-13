@@ -80,6 +80,10 @@ export function setActiveSlot(game, slot) {
   if (s !== 'pc1') setRaw(P + 'slotsUsed.' + game, '1');
   return ok;
 }
+// Called when a profile is given weapons without being switched to (Import from game save).
+export function noteSlotUsed(game, slot) {
+  if (isGame(game) && isSlot(slot) && slot !== 'pc1') setRaw(P + 'slotsUsed.' + game, '1');
+}
 // True once the game has used a profile other than PC 1; until then its pages look as they did with one profile.
 export function slotsInUse(game) {
   return activeSlot(game) !== 'pc1' || getRaw(P + 'slotsUsed.' + game) === '1' || getRaw(P + 'p2used') === '1';

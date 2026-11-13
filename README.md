@@ -45,6 +45,8 @@ The site is plain HTML, CSS and JavaScript (ES modules). Nothing is compiled, an
 | `css/hq.css` | HQ page |
 | `data/edf41.json`, `edf5.json`, `edf6.json` | Weapon data, one file per game |
 | `data/edf41-legacy.json` | Maps the old checklist's saved positions to the new weapon ids |
+| `js/savefile.js` | Reads the owned weapons out of a game's own PC save file (HQ: Import from game save). The layout is described at the top of the file |
+| `data/edf41-save.json`, `edf5-save.json`, `edf6-save.json` | For each position in a save's weapon table, the tracker's weapon id |
 | `fonts/` | Self-hosted fonts (SIL Open Font License, texts in `fonts/licenses`) |
 
 Each data file also holds the drop tables: `drops = [{name, pack, missions, diffs}]`, where `diffs` has one `[lowestLevels, highestLevels]` pair per difficulty, listing what each mission can drop.
@@ -64,3 +66,5 @@ Written for browsers released since spring 2021: Safari and iOS 14.5+, Chrome an
 
 ## Data source
 Weapon names, levels, star caps and drop tables come from [edf-calc](https://github.com/zeddidragon/edf-calc) by Tony Sæle (zeddidragon), its sole contributor.
+
+The layout of the games' PC save files, used by Import from game save, was first described in [EDFSaveEditor](https://github.com/FevGrave/EDFSaveEditor) by FevGrave (public domain, CC0). Each game's layout was then checked against real saves. The tracker only reads a save; it never changes one, and the file never leaves the device.

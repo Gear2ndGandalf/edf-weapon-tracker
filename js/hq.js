@@ -141,6 +141,7 @@ function showProfiles() {
     b.setAttribute('aria-pressed', String(slot === active));
   });
   $('#slotNow').textContent = store.GAME_NAMES[shownGame] + ' uses ' + names[active];
+  if (hasSaveIn && !saveIn.hidden) showSaveTarget(); // the open "Import from game save" panel lists profiles too
 }
 if (!hasSlots) { // mismatched files during an update: hide a profile list that could not work
   ['#segProfile', '#segGame'].forEach((sel) => { if ($(sel)) $(sel).hidden = true; });
@@ -167,6 +168,273 @@ if (!hasSlots) { // mismatched files during an update: hide a profile list that 
     showProfiles();
     showProgress();
     showBackup();
+  });
+}
+
+// ---------- Import from game save ----------
+// Marks the weapons owned by reading the player's own PC save. The reading is done by
+// js/savefile.js, which is only loaded when this panel is opened. Nothing is saved until
+// the player has seen what would change and picked Add or Match; Undo takes it back.
+// (The button stays hidden when this script is paired with a previous index.html or store.js.)
+const saveIn = $('#saveIn');
+const saveOpen = $('#saveOpen');
+const hasSaveIn = !!(store.SLOTS && saveIn && saveOpen && $('#saveGame') && $('#saveSlot') && $('#saveFile') && $('#saveResult') && $('#savePath') && $('#saveName') &&
+  $('#saveClose') && $('#savePick') && $('#saveCopy'));
+let saveLib = null;     // promise for js/savefile.js, once asked for
+let saveLibNow = null;  // the module itself, once loaded
+let saveUndo = null;    // { game, slot, added: [id], removed: [id] }: what the last import changed
+let saveTurn = 0;       // goes up whenever the panel's question changes, so an answer that arrives late is dropped
+const weapons = (n) => n + (n === 1 ? ' weapon' : ' weapons');
+function saveLibrary() {
+  if (!saveLib) {
+    saveLib = import('./savefile.js').then((lib) => { saveLibNow = lib; return lib; });
+    saveLib.catch(() => { saveLib = null; }); // allow another try
+  }
+  return saveLib;
+}
+// The result area: lines of plain text, then buttons. Keyboard focus stays in the area if it was there.
+function saveMessage(lines, buttons) {
+  const box = $('#saveResult');
+  const hadFocus = box.contains(document.activeElement);
+  box.textContent = '';
+  (lines || []).forEach((text) => {
+    const p = document.createElement('p');
+    p.textContent = text;
+    box.appendChild(p);
+  });
+  if (buttons && buttons.length) {
+    const row = document.createElement('div');
+    row.className = 'savein__row';
+    buttons.forEach((b) => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'hq-btn' + (b.primary ? ' hq-btn--red' : '');
+      el.textContent = b.label;
+      el.addEventListener('click', b.run);
+      row.appendChild(el);
+    });
+    box.appendChild(row);
+  }
+  box.hidden = !(lines && lines.length);
+  if (hadFocus) (box.querySelector('button') || $('#savePick')).focus();
+}
+const saveTargetName = (game, slot) => store.GAME_NAMES[game] + ' · ' + store.slotNames(game)[slot];
+// The profile list and folder path for the game chosen in the panel. The chosen profile is kept
+// while the game stays the same; `fresh` starts over on the game's profile in use.
+function showSaveTarget(fresh) {
+  const lib = saveLibNow;
+  const game = $('#saveGame').value;
+  if (!lib || !lib.SAVES[game]) return;
+  const names = store.slotNames(game);
+  const active = store.activeSlot(game);
+  const list = $('#saveSlot');
+  const keep = !fresh && list.dataset.game === game && store.SLOTS.indexOf(list.value) !== -1 ? list.value : active;
+  list.textContent = '';
+  store.SLOTS.forEach((slot) => {
+    const o = document.createElement('option');
+    o.value = slot;
+    o.textContent = names[slot] + (slot === active ? ' (in use)' : '');
+    list.appendChild(o);
+  });
+  list.value = keep;
+  list.dataset.game = game;
+  $('#savePath').textContent = lib.SAVES[game].where;
+  $('#saveName').textContent = lib.SAVES[game].file;
+}
+function refreshAfterSave() {
+  showProfiles();
+  showProgress();
+  showBackup();
+}
+// How many owned weapons have every star, counted the way the game page counts them. The game's
+// weapon list is needed for the star caps; if it cannot be fetched the old number is kept, capped.
+async function recountMaxed(game, slot) {
+  let data = null;
+  try {
+    const res = await fetch('data/' + game + '.json');
+    if (res.ok) data = await res.json();
+  } catch (e) { /* offline and not saved yet: keep the old number, capped; the game page corrects it when next opened */ }
+  const p = store.loadProgress(game, slot); // read after the wait, so nothing done meanwhile is counted wrongly
+  const s = store.loadSummary(game, slot);
+  let maxed = Math.min(s.maxed, p.owned.size);
+  if (data && Array.isArray(data.classes)) {
+    maxed = 0;
+    if (data.hasStars) {
+      for (const c of data.classes) for (const k of c.cats) for (const t of k.items) {
+        const up = t[4] || [];
+        const have = p.stars[t[0]] || [];
+        if (up.length && p.owned.has(t[0]) && up.every((u, i) => (have[i] | 0) >= u[1])) maxed++;
+      }
+    }
+  }
+  store.saveProgress(game, p, { owned: p.owned.size, maxed, total: s.total }, slot);
+  refreshAfterSave();
+}
+// Change one profile so that it owns what the save owns. `match` also unmarks weapons the save
+// does not own. Worked out from the profile as it is now, not as it was when the preview was shown.
+// Stars are never changed.
+function applySave(game, slot, savedIds, match) {
+  const p = store.loadProgress(game, slot);
+  const inSave = new Set(savedIds);
+  const added = savedIds.filter((id) => !p.owned.has(id));
+  const removed = match ? Array.from(p.owned).filter((id) => !inSave.has(id)) : [];
+  added.forEach((id) => p.owned.add(id));
+  removed.forEach((id) => p.owned.delete(id));
+  const s = store.loadSummary(game, slot);
+  if (!store.saveProgress(game, p, { owned: p.owned.size, maxed: Math.min(s.maxed, p.owned.size), total: s.total }, slot)) {
+    saveMessage(['Progress could not be saved on this device. Storage is full or blocked.']);
+    return;
+  }
+  if (p.owned.size && store.noteSlotUsed) store.noteSlotUsed(game, slot);
+  saveUndo = { game, slot, added, removed };
+  saveMessage([(added.length ? 'Marked ' + weapons(added.length) : 'Nothing to mark') + (removed.length ? ' and unmarked ' + weapons(removed.length) : '') + ' in ' + saveTargetName(game, slot) + '.'],
+    added.length || removed.length ? [{ label: 'Undo', run: undoSave }] : []);
+  refreshAfterSave();
+  recountMaxed(game, slot);
+}
+// Takes back exactly what the last import changed. Anything marked, unmarked or upgraded since then stays.
+function undoSave() {
+  const u = saveUndo;
+  if (!u) return;
+  saveUndo = null;
+  const p = store.loadProgress(u.game, u.slot);
+  u.added.forEach((id) => p.owned.delete(id));
+  u.removed.forEach((id) => p.owned.add(id));
+  const s = store.loadSummary(u.game, u.slot);
+  if (!store.saveProgress(u.game, p, { owned: p.owned.size, maxed: Math.min(s.maxed, p.owned.size), total: s.total }, u.slot)) {
+    saveMessage(['Progress could not be saved on this device. Storage is full or blocked.']);
+    return;
+  }
+  saveMessage(['The import into ' + saveTargetName(u.game, u.slot) + ' was taken back.']);
+  refreshAfterSave();
+  recountMaxed(u.game, u.slot);
+}
+// Read the chosen file and show what importing it would change.
+async function previewSave(file) {
+  let game = $('#saveGame').value;
+  const slot = $('#saveSlot').value;
+  if (!file || store.GAMES.indexOf(game) === -1 || store.SLOTS.indexOf(slot) === -1) return;
+  const turn = ++saveTurn;
+  saveUndo = null;
+  saveMessage(['Reading the save…']);
+  try {
+    const lib = await saveLibrary();
+    if (turn !== saveTurn) return;
+    // Each game's save has its own size, so a file picked with the wrong Game chosen is recognised,
+    // and anything else is turned away without being read.
+    const fits = store.GAMES.filter((g) => lib.SAVES[g] && lib.SAVES[g].size === file.size);
+    if (!fits.length) throw lib.wrongFile(game);
+    const switched = fits[0] !== game;
+    if (switched) {
+      game = fits[0];
+      $('#saveGame').value = game;
+      showSaveTarget();
+      $('#saveSlot').value = slot; // the same profile number, in the right game
+    }
+    let data;
+    try {
+      data = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : await new Response(file).arrayBuffer();
+    } catch (e) { // moved, deleted or locked since it was chosen
+      throw Object.assign(new Error('The file could not be opened. It may have been moved or be in use; choose it again.'), { readable: true });
+    }
+    const found = await lib.readSave(game, data);
+    if (turn !== saveTurn) return; // the game, profile or file was changed while this one was being read
+    const now = store.loadProgress(game, slot).owned;
+    const inSave = new Set(found.owned);
+    const add = found.owned.filter((id) => !now.has(id)).length;
+    const remove = Array.from(now).filter((id) => !inSave.has(id)).length;
+    const lines = ['This save owns ' + found.owned.length + ' of ' + found.total + ' weapons. ' + saveTargetName(game, slot) + ' has ' + now.size + ' marked.'];
+    if (switched) lines.unshift('This is an ' + store.GAME_NAMES[game] + ' save, so Game was changed to ' + store.GAME_NAMES[game] + '.');
+    const buttons = [];
+    if (!add && !remove) {
+      lines.push('They already match, so there is nothing to import.');
+    } else {
+      if (add) {
+        lines.push('Add: marks the ' + weapons(add) + ' the save owns that ' + (add === 1 ? 'is' : 'are') + ' not marked yet.');
+        buttons.push({ label: 'Add ' + add, primary: true, run: () => applySave(game, slot, found.owned, false) });
+      }
+      if (remove) {
+        lines.push('Match: ' + (add ? 'does that and also ' : '') + 'unmarks the ' + weapons(remove) + ' marked here that this save does not own.');
+        buttons.push({ label: 'Match the save', primary: !add, run: () => applySave(game, slot, found.owned, true) });
+      }
+    }
+    buttons.push({ label: 'Cancel', run: () => saveMessage([]) });
+    saveMessage(lines, buttons);
+  } catch (err) {
+    if (turn !== saveTurn) return;
+    saveMessage([err && err.readable ? err.message : 'The save could not be read.']);
+  }
+}
+if (hasSaveIn) {
+  saveOpen.hidden = false;
+  const hasFiles = (e) => !!(e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1);
+  const closeSave = () => {
+    saveTurn++;
+    const hadFocus = saveIn.contains(document.activeElement);
+    saveIn.hidden = true;
+    saveOpen.setAttribute('aria-expanded', 'false');
+    saveMessage([]);
+    saveUndo = null;
+    if (hadFocus) saveOpen.focus();
+  };
+  saveOpen.addEventListener('click', async () => {
+    if (!saveIn.hidden) { closeSave(); return; }
+    try {
+      const lib = await saveLibrary();
+      const games = store.GAMES.filter((g) => lib.SAVES[g]);
+      const list = $('#saveGame');
+      list.textContent = '';
+      games.forEach((g) => {
+        const o = document.createElement('option');
+        o.value = g;
+        o.textContent = store.GAME_NAMES[g];
+        list.appendChild(o);
+      });
+      list.value = games.indexOf(shownGame) !== -1 ? shownGame : games[0];
+      showSaveTarget(true);
+      saveMessage([]);
+      saveIn.hidden = false;
+      saveOpen.setAttribute('aria-expanded', 'true');
+      if (saveIn.scrollIntoView) saveIn.scrollIntoView({ block: 'nearest' });
+      $('#saveTitle').focus();
+    } catch (err) {
+      notice('The save reader did not load. Check your connection, reload this page and try again.');
+    }
+  });
+  $('#saveClose').addEventListener('click', closeSave);
+  $('#saveGame').addEventListener('change', () => { saveTurn++; saveUndo = null; showSaveTarget(true); saveMessage([]); });
+  $('#saveSlot').addEventListener('change', () => { saveTurn++; saveUndo = null; saveMessage([]); });
+  $('#savePick').addEventListener('click', () => $('#saveFile').click());
+  $('#saveFile').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    previewSave(file);
+  });
+  // A file can also be dropped onto the panel. While the panel is open, a file dropped beside it
+  // is ignored, so a near miss does not make the browser open the save as a page.
+  saveIn.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); saveIn.classList.add('is-drop'); } });
+  saveIn.addEventListener('dragleave', (e) => { if (!saveIn.contains(e.relatedTarget)) saveIn.classList.remove('is-drop'); });
+  saveIn.addEventListener('drop', (e) => {
+    saveIn.classList.remove('is-drop');
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    previewSave(e.dataTransfer.files && e.dataTransfer.files[0]);
+  });
+  ['dragover', 'drop'].forEach((type) => window.addEventListener(type, (e) => { if (!saveIn.hidden && hasFiles(e)) e.preventDefault(); }));
+  $('#saveCopy').addEventListener('click', () => {
+    const btn = $('#saveCopy');
+    const said = (text) => { btn.textContent = text; setTimeout(() => { btn.textContent = 'Copy'; }, 1800); };
+    const selectIt = () => { // no clipboard access: select the path so it can be copied by hand
+      const range = document.createRange();
+      range.selectNodeContents($('#savePath'));
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      said('Selected');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText($('#savePath').textContent).then(() => said('Copied'), selectIt);
+    else selectIt();
   });
 }
 

@@ -7,6 +7,20 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.7.0 – 2026-11-13
+### Added
+- **Import from game save** (HQ, PC version on Steam): choose your `MAIN.GST` and the tracker marks the weapons that save owns, for EDF 4.1, 5 and 6. The file is read on the device and never uploaded.
+  - Pick the game and the profile to fill. The four PC profiles match the game's four save slots (`saveslot00` to `saveslot03`).
+  - Nothing changes until you have seen the result: how many weapons the save owns and how that differs from the profile. **Add** only marks more weapons; **Match the save** also unmarks weapons the save does not own. **Undo** puts the profile back.
+  - A save picked under the wrong game is recognised by its size. Files that are damaged, cut off, or in a format the tracker does not know are refused with nothing changed.
+  - Star levels are not read yet (EDF 5 and 6): the save holds them, but in an order that still has to be worked out per weapon type.
+- `js/savefile.js` (the reader) and `data/<game>-save.json` (which weapon each position in a save stands for).
+
+### Notes
+- Console saves cannot be read: PlayStation and Switch do not give players a readable save file.
+- Save layouts were checked against real saves of all three games. Thanks to FevGrave's public-domain EDFSaveEditor for the first description of them.
+- `tools/test_app.py` builds its own sample saves from a second, independent description of the layouts, so no real save is stored in the repository.
+
 ## v1.6.0 – 2026-11-12
 ### Added
 - **Each game's own text**, set on HQ under the game's profiles: a font, a size and a style (Bold, Italic, Caps), with a line of sample text. Size starts on Same, which follows the Text size for all pages; the slider gives that game its own size from 60% to 150%.

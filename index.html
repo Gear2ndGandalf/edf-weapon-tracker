@@ -153,10 +153,34 @@
       </div>
     </section>
 
+    <section class="savein" id="saveIn" aria-labelledby="saveTitle" hidden>
+      <h2 class="savein__title" id="saveTitle" tabindex="-1">Import from game save</h2>
+      <p class="savein__text">Marks the weapons you own by reading your own save file from the PC (Steam) version. The file is read on this device only; nothing is uploaded. Star levels are not read yet.</p>
+      <div class="setting">
+        <label class="setting__label setting__label--sub" for="saveGame">Game</label>
+        <select class="select" id="saveGame"></select>
+      </div>
+      <div class="setting">
+        <label class="setting__label setting__label--sub" for="saveSlot">Into profile</label>
+        <select class="select" id="saveSlot"></select>
+      </div>
+      <p class="savein__text">Choose <b id="saveName">MAIN.GST</b> from a save slot's folder (<b>saveslot00</b> is the first slot). The saves are in the folder with your Steam number under:</p>
+      <div class="savein__path">
+        <code id="savePath"></code>
+        <button type="button" id="saveCopy" title="Copy this folder path, then paste it into the file window's address bar">Copy</button>
+      </div>
+      <div class="savein__row">
+        <button type="button" class="hq-btn hq-btn--red" id="savePick">Choose the save file</button>
+        <button type="button" class="hq-btn" id="saveClose">Close</button>
+      </div>
+      <input type="file" id="saveFile" hidden>
+      <div class="savein__result" id="saveResult" role="status" aria-live="polite" hidden></div>
+    </section>
     <div class="actions">
       <button type="button" class="hq-btn" id="export">Export progress</button>
       <button type="button" class="hq-btn" id="import">Import progress</button>
       <input type="file" id="importfile" accept="application/json,.json" hidden>
+      <button type="button" class="hq-btn hq-btn--wide" id="saveOpen" aria-expanded="false" aria-controls="saveIn" hidden>Import from game save</button>
     </div>
     <p class="backup" id="backup" hidden></p>
     <p class="credit"><span id="version"></span> · Weapon data and drop tables from <a href="https://github.com/zeddidragon/edf-calc" rel="noopener">edf-calc</a> by Tony Sæle (zeddidragon)</p>

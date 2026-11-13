@@ -15,7 +15,7 @@ const CACHE = 'edf-tracker-v' + self.APP_VERSION;
 const CORE = [
   './', 'index.html', 'manifest.webmanifest',
   'css/base.css', 'css/hq.css',
-  'js/version.js', 'js/prefs.js', 'js/store.js', 'js/hq.js', 'js/sw-register.js',
+  'js/version.js', 'js/prefs.js', 'js/store.js', 'js/hq.js', 'js/savefile.js', 'js/sw-register.js',
   'data/edf41-legacy.json',
   'img/rh-base.svg', 'img/rh-light.svg',
   'fonts/oxanium-latin-600-normal.woff2', 'fonts/oxanium-latin-700-normal.woff2',
