@@ -95,9 +95,10 @@ $('#importfile').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!file) return;
-  if (!window.confirm('Importing replaces your saved progress for each game and profile in the file. Continue?')) return;
+  if (!window.confirm('Importing replaces the saved progress here with the file\u2019s, for every game and profile the file holds. A profile that is empty in the file becomes empty here. Continue?')) return;
   try {
     notice(await store.importFile(file));
+    ['edf5', 'edf6'].forEach((g) => (store.SLOTS || []).forEach((slot) => { const s = store.loadSummary(g, slot); if (s.owned > 0 || s.maxed > 0) recountMaxed(g, slot); }));
     showProfiles();
     showProgress();
     showBackup();
@@ -185,6 +186,8 @@ let saveLib = null;     // promise for js/savefile.js, once asked for
 let saveLibNow = null;  // the module itself, once loaded
 let saveUndo = null;    // what the last import changed: { game, slot, added: [id], removed: [id], stars: { id: { was, now } }, after: { id: stars } }
 let savePreview = false; // true while the result area shows a preview with Add / Match buttons
+// "Also read star levels" as it is ticked right now (a preview can outlive a change of the box).
+const starsWanted = () => !!($('#saveStars') && $('#saveStars').checked);
 let saveTurn = 0;       // goes up whenever the panel's question changes, so an answer that arrives late is dropped
 const weapons = (n) => n + (n === 1 ? ' weapon' : ' weapons');
 function saveLibrary() {
@@ -412,12 +415,12 @@ async function previewSave(file) {
       lines.push(withStars ? 'They already match, weapons and stars, so there is nothing to import.' : 'They already match, so there is nothing to import.');
     } else {
       if (adds.length) {
-        lines.push('Add: ' + adds.join(' and ') + '. Nothing is unmarked' + (withStars ? ' or lowered.' : '.'));
-        buttons.push({ label: add.added.length ? 'Add ' + add.added.length : 'Raise stars', primary: true, run: () => applySave(game, slot, found, false, withStars) });
+        lines.push((add.added.length ? 'Add: ' : 'Raise stars: ') + adds.join(' and ') + '. Nothing is unmarked' + (withStars ? ' or lowered.' : '.'));
+        buttons.push({ label: add.added.length ? 'Add ' + add.added.length : 'Raise stars', primary: true, run: () => applySave(game, slot, found, false, withStars && starsWanted()) });
       }
       if (more.length) {
         lines.push('Match: ' + (adds.length ? 'does that and also ' : '') + more.join(' and ') + '.');
-        buttons.push({ label: 'Match the save', primary: !adds.length, run: () => applySave(game, slot, found, true, withStars) });
+        buttons.push({ label: 'Match the save', primary: !adds.length, run: () => applySave(game, slot, found, true, withStars && starsWanted()) });
       }
     }
     if (noStars) lines.push('Star levels could not be read this time. Reload this page and choose the file again to bring them over.');
@@ -639,7 +642,7 @@ showBackup();
 // (an older store.js may still be in use right after an update; it has no newsDue)
 const news = store.newsDue ? store.newsDue(seen) : seen.updated;
 if (news) {
-  notice('Updated to v' + seen.to + '. New: ' + (self.APP_NEWS || []).join(', ') + '.');
+  notice(['Updated to v' + seen.to].concat(self.APP_NEWS || []).join('. ') + '.');
   // The count of fully upgraded weapons was made with the star maximums of the version before; make it again.
   ['edf5', 'edf6'].forEach((g) => (store.SLOTS || []).forEach((slot) => { if (store.loadSummary(g, slot).maxed > 0) recountMaxed(g, slot); }));
 }

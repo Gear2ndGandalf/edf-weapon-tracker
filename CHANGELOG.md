@@ -7,9 +7,28 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.9.1 – 2026-11-13
+### Fixed
+- **Italic text was cut off at the right edge** of the class tabs (Ranger, W.Diver, A.Raider, Fencer), the category button and, with some fonts, the title. Slanted letters lean out of their box, and those boxes clip their text; they now leave room for the last letter. Seen on phones with Italic switched on for a game.
+- **The list of upgrades jumped back to the top** every time a star was changed, because the panel is redrawn on each change. It now stays where it was scrolled to while the same weapon is shown (EDF 5 and 6, on phones with Game pages set to Fit screen, upright or sideways).
+- **Edits under Missing or To upgrade went to the wrong weapon.** When a change took the current weapon out of the filtered list (the first star marks it owned; the last star finishes it), the panel jumped to the first weapon in the list, and the next taps changed that one, without any notice. The panel now stays on the weapon you are editing until you pick another or change the list.
+- **Undo took back too much.** After Clear or Mark all, an Undo pressed a few seconds later also removed everything changed in between. Undo is now withdrawn as soon as something else is changed.
+- **Short phone screens** (about 680 px tall or less with the browser's bars showing, for example Safari on a small iPhone): with Fit screen, an opened weapon had room for one row of upgrades or none. Such a screen now scrolls as a page once a weapon with a longer list is opened.
+- **Opening a game or profile that has no progress** no longer counts as a change (HQ said "Progress has changed since the last export").
+- **Fully upgraded on HQ** is counted again after a backup is imported, instead of trusting the number in the file.
+- **Import from game save:** if "Also read star levels" is unticked after a preview, Add and Match now leave the stars alone in every case.
+- **Keyboard:** when "+" reaches the top or "−" reaches zero, the focus moves to the other button instead of being lost. Changing the filter shows the list from the top.
+- **A value of a Lock-on line that has its row elsewhere** is now named for what it is on that line: "Targets · same as Capacity" instead of a second "Capacity" (missile launchers).
+- **Search** finds the two EDF 5 weapons whose names the game writes with two spaces or a full-width letter (HS99 Bound Gun, Stardust Cannon A) when you type them as they look. The hint under an empty search no longer suggests setting the filter to All when it already is.
+- **Wording.** The update note on HQ reads as sentences. The import preview says "Raise stars:" when that is the button. The warning before importing a backup says that a profile that is empty in the file becomes empty here. Messages about a wrong save file no longer suggest changing the Game, which is chosen by the file itself. Screen readers hear "Lock-on, Range" instead of "Lock-on: Range:".
+
+### Notes
+- Everything after the first two fixes was found by a check of the whole app that followed them.
+- Still open, because they change counts or how the app behaves and should be decided first: the "Empty" / "Not Equipped" placeholders are counted as weapons (4 per game in EDF 5 and 6); stars for upgrades with fewer than five steps can be set by hand to values the game never shows (4 of a 4-step upgrade); "Fully upgraded" has no "out of" number; the Undo note covers a star row of the panel for a few seconds on phones; Import from game save needs one online use before it works offline; Safari fetches the weapon list twice on a first visit.
+
 ## v1.9.0 – 2026-11-13
 ### Changed
-- **Upgrades follow the game's equipment screen exactly** (EDF 5 and 6). The lines, their names and their order are now read from the games' own weapon text, weapon by weapon, instead of being guessed from a list of stat names. So a rifle shows Capacity, ROF, Damage, Reload Time, Range, Shot Speed, Accuracy, a drone shows Number, and an air strike shows Re-request, as in the game. Saved stars are not affected: only names and the order on screen change.
+- **Upgrades follow the game's equipment screen exactly** (EDF 5 and 6). The lines, their names and their order are now read from the games' own weapon text, weapon by weapon, instead of being guessed from a list of stat names. So a rifle shows Capacity, ROF, Damage, Reload Time, Range, Shot Speed, Accuracy, a sentry gun shows Number, and an air strike shows Re-request, as in the game. Saved stars are not affected: only names and the order on screen change.
 - **Lines with two values show the game's star.** Where the game prints one star for two values (Damage × Count on shotguns and Wing Diver weapons, Lock-on range and targets, a Fencer's melee Damage and Range), the tracker shows that line with "In game: ☆4" and the two values under it. The game's star is their average, and half a star is printed as "+" (☆4+ is 4.5).
 - A value the game shows on two lines (Range and Shot Speed come from the same upgrade) has one row of stars; the second line says which row it repeats.
 
@@ -31,14 +50,14 @@ and shown on the HQ page.
 ### Fixed
 - **Star maximums are back to what the game shows.** v1.8.0 lowered the maximum of stats that have fewer than five upgrade steps (to one to four stars). That was a mistake: the game shows such a stat on a scale that still ends at five, so a stat with two steps reads ★5 when it is finished, not ★2. Every maximum is again what it was up to v1.7.0.
 - **Imported stars match the game's equipment screen** (not for unfinished upgrades with fewer than five steps; corrected in v1.9.0). A save holds each stat's level, from 0 up to its number of steps. For a stat with fewer than five steps the game shows the level plus the missing steps (level 2 of 2 is shown as 5), and the import now does the same. v1.8.0 brought such stats over too low.
-  - **If you imported stars with v1.8.0, import the same save again and choose Add (or Raise stars).** That lifts the stats that came over too low. Nothing is lowered.
+  - **If you imported stars with v1.8.0, import the same save again and choose Add (or Raise stars).** That lifts the stats that came over too low. Nothing is lowered. (Superseded: see v1.9.0, which asks for Match the save.)
   - A weapon whose stars you changed by hand in v1.8.0 may have kept the lowered value on such a stat; set it again or import your save.
-- **Stat names follow the game.** The reload stat of Wing Diver weapons that run on energy is **Charge Time**, and EDF 5's shot speed stat is **Range**, as on the game's equipment screen. Saved stars are not affected by the new names.
+- **Stat names follow the game.** The reload stat of Wing Diver weapons that run on energy is **Charge Time**, and EDF 5's shot speed stat is **Range**, as on the game's equipment screen (since v1.9.0 each weapon uses its own line names, so some show Shot Speed). Saved stars are not affected by the new names.
 - **Stats are listed in the order of the game's equipment screen** (Capacity, Rate of Fire, Damage, … Energy Cost, Charge Time) instead of the order of the source data. Only the order on screen changes; saved stars stay with their stat. The order was compared with the game on three weapons; stats those do not have (Burst Rate, Blast Radius, Lock Range, Lock Time, and the Fencer's spin-up Charge Time) are placed by best guess.
 
 ### Notes
-- Checked against the game on two weapons (EDF 6 Lightning Bow and EDF 5 Spark Vine Y3): every star the tracker imports is the one on the equipment screen, with one difference that remains. The game shows a single star for Damage on weapons that fire several shots at once ("44.4 × 3") and folds the number of shots into it; the tracker keeps **Damage** and **Count** as two stats, so the Damage star can differ from the game's by one or two on those weapons.
-- The scale for stats with fewer than five steps was confirmed on finished stats (level 2 of 2 and 3 of 3 both read ★5 in the game). Levels in between follow from how the games work out a stat's value (★5 is always the listed value), but have not been compared with the equipment screen yet.
+- Checked against the game on two weapons (EDF 6 Lightning Bow and EDF 5 Spark Vine Y3): every star the tracker imports is the one on the equipment screen, with one difference that remains. The game shows a single star for Damage on weapons that fire several shots at once ("44.4 × 3") and folds the number of shots into it; the tracker keeps **Damage** and **Count** as two stats, so the Damage star can differ from the game's by one or two on those weapons. (Resolved in v1.9.0: that star is the average of Damage and Count, and the tracker shows it.)
+- The scale for stats with fewer than five steps was confirmed on finished stats (level 2 of 2 and 3 of 3 both read ★5 in the game). Levels in between follow from how the games work out a stat's value (★5 is always the listed value), but have not been compared with the equipment screen yet. (Wrong for levels in between; corrected in v1.9.0.)
 - HQ now lists what is new also when the update was first met on a game page, and counts fully upgraded weapons again after this update (the count had been made with the lowered maximums).
 - Changing one stat's stars no longer rewrites the weapon's other stats.
 

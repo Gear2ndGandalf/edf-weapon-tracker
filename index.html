@@ -75,7 +75,7 @@
     <section class="settings" aria-label="Settings">
       <div class="setting" role="group" aria-labelledby="lblProfile">
         <span class="setting__label" id="lblProfile">Profiles</span>
-        <div class="seg" id="segGame" title="Choose whose profiles to show">
+        <div class="seg" id="segGame" title="Choose which game's profiles to show">
           <button type="button" data-game="edf41">EDF 4.1</button>
           <button type="button" data-game="edf5">EDF 5</button>
           <button type="button" data-game="edf6">EDF 6</button>
@@ -114,7 +114,7 @@
         <div class="setting" role="group" aria-labelledby="lblTypeSize">
           <span class="setting__label setting__label--sub" id="lblTypeSize">Size</span>
           <div class="seg seg--text" id="segTypeSize">
-            <button type="button" id="typeSame" title="Use the Text size set below for every page">Same</button>
+            <button type="button" id="typeSame" title="Use the general Text size setting (below) for this game">Same</button>
             <input type="range" class="range" id="typeRange" min="60" max="150" step="5" value="100" aria-labelledby="lblTypeSize" aria-valuetext="100%">
             <span class="seg__value" id="typeValue" aria-hidden="true">100%</span>
           </div>
@@ -140,7 +140,7 @@
       <div class="setting" role="group" aria-labelledby="lblLayout">
         <span class="setting__label" id="lblLayout">Game pages</span>
         <div class="seg" id="segLayout">
-          <button type="button" data-layout="fit" title="Everything fits on one screen; the weapon list scrolls inside it">Fit screen</button>
+          <button type="button" data-layout="fit" title="Everything fits on one screen; the weapon list and the upgrades scroll inside it">Fit screen</button>
           <button type="button" data-layout="scroll" title="On phones and tablets: a taller weapon list and the full details, on a page that scrolls">Taller lists</button>
         </div>
       </div>
@@ -165,7 +165,7 @@
         <select class="select" id="saveSlot"></select>
       </div>
       <label class="savein__check" id="saveStarsRow"><input type="checkbox" id="saveStars" checked> <span>Also read star levels</span></label>
-      <p class="savein__text">Choose <b id="saveName">MAIN.GST</b> from a save slot's folder (<b>saveslot00</b> is the first slot). The saves are in the folder with your Steam number under:</p>
+      <p class="savein__text">Choose <b id="saveName">MAIN.GST</b> from a save slot's folder (<b>saveslot00</b> is the first slot). The saves are in this folder, inside a folder named with your Steam ID number:</p>
       <div class="savein__path">
         <code id="savePath"></code>
         <button type="button" id="saveCopy" title="Copy this folder path, then paste it into the file window's address bar">Copy</button>

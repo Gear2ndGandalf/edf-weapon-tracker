@@ -186,7 +186,9 @@ export function saveProgress(game, progress, summary, slot) {
   const key = progressKey(game, slot);
   const text = JSON.stringify({ owned: Array.from(progress.owned), stars: progress.stars });
   let ok = true;
-  if (getRaw(key) !== text) { // only real changes count as "changed since the last export"
+  const had = getRaw(key);
+  const nothing = had === null && !Array.from(progress.owned).length && !Object.keys(progress.stars).length; // nothing saved, nothing to save
+  if (had !== text && !nothing) { // only real changes count as "changed since the last export"
     ok = setRaw(key, text);
     if (ok) setRaw(P + 'lastChange', new Date().toISOString());
   }

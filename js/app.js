@@ -61,6 +61,8 @@ function withStar(w, i, n) {
   return list;
 }
 const capOf = (w) => w.up.reduce((a, u) => a + u.max, 0);
+// Text as it is compared in a search: lower case, full-width letters as plain ones, runs of spaces as one.
+const plain = (s) => { const t = String(s); return (t.normalize ? t.normalize('NFKC') : t).replace(/\s+/g, ' ').trim().toLowerCase(); };
 // The star the game prints in front of a line of its equipment screen: the average of the line's upgrades,
 // cut to tenths. Half a star is printed as "+", and the star is filled only when the line is finished.
 function gameStar(w, line, stars) {
@@ -213,18 +215,25 @@ function filterOk(w) {
 }
 function visibleRows() {
   if (query) {
-    const q = query.toLowerCase();
+    const q = plain(query);
     return all.filter((w) => w.lname.indexOf(q) !== -1 && filterOk(w));
   }
   return D.classes[ui.cls].cats[ui.cat].items.filter(filterOk);
 }
 
 // ---------- Rendering ----------
+let shownPlace = ''; // the class, category, filter and search the list was last drawn for
 function render() {
   const focus = rememberFocus();
   const rows = visibleRows();
   const inRows = rows.some((w) => w.id === cursorId);
-  if (!byId.has(cursorId) || (!query && rows.length && !inRows)) {
+  // The panel follows the list when the list changes (another class, category, filter or search). It does
+  // not jump to another weapon when an edit takes the current one out of the list (marked owned under
+  // Missing, fully upgraded under To upgrade): the next tap would change the wrong weapon.
+  const place = ui.cls + ':' + ui.cat + ':' + ui.filter + ':' + query;
+  const moved = place !== shownPlace;
+  shownPlace = place;
+  if (!byId.has(cursorId) || (!query && rows.length && !inRows && moved)) {
     const first = rows.length ? rows[0] : D.classes[ui.cls].cats[ui.cat].items[0];
     cursorId = first ? first.id : null;
   }
@@ -241,7 +250,8 @@ function render() {
 // ---------- Fit check ----------
 // On phones the page normally fits one screen. When the header of the details panel no longer
 // fits (a very narrow screen, or a wide font or capitals picked on HQ), the page switches to the
-// scrolling layout (class "no-fit", same rules as large text) instead of clipping it. Checked
+// scrolling layout (class "no-fit", same rules as large text) instead of clipping it. So does a
+// screen too short to show the panel's list. Checked
 // after every redraw and once the fonts have loaded. It is only reconsidered when the screen
 // width changes: mobile browsers change the height while a page scrolls.
 let fitWidth = window.innerWidth;
@@ -251,6 +261,10 @@ function checkFit() {
   const detail = $('#detail');
   const head = detail.querySelector('.detail__head');
   if (head && detail.clientHeight + 1 < head.offsetHeight) root.classList.add('no-fit');
+  // The same when the open panel has room for only about one row of a longer list (short phone
+  // screens with the browser's bars showing): a list that can barely be seen is no use.
+  const stats = detail.querySelector('.stats');
+  if (stats && stats.clientHeight > 0 && stats.clientHeight < 92 && stats.scrollHeight > stats.clientHeight + 1) root.classList.add('no-fit');
 }
 window.addEventListener('resize', () => {
   if (window.innerWidth === fitWidth) return;
@@ -303,7 +317,7 @@ function renderFilters() {
 }
 
 function emptyMessage() {
-  if (query) return 'No weapons match “' + esc(query) + '”. Check the spelling or set the filter to All.';
+  if (query) return 'No weapons match “' + esc(query) + '”. Check the spelling' + (ui.filter ? ' or set the filter to All.' : '.');
   if (ui.filter === 1) return 'You own everything in this category.';
   if (ui.filter === 2 && D.hasStars) return 'No owned weapons here have stars left to earn.';
   if (ui.filter === 2) return 'You have not marked any weapons in this category yet.';
@@ -369,7 +383,12 @@ function renderList(rows) {
 function renderDetail() {
   const box = $('#detail');
   const w = byId.get(cursorId);
-  if (!w) { box.innerHTML = ''; return; }
+  if (!w) { box.innerHTML = ''; box.dataset.shown = ''; return; }
+  // Every change redraws the panel. While it still shows the same weapon and view, its list stays where it
+  // was scrolled to, so adding a star far down does not jump back to the top.
+  const shown = w.id + ' ' + (D.hasStars && ui.view === 'drops' ? 'drops' : 'stars');
+  const before = box.querySelector('.stats');
+  const keepTop = before && box.dataset.shown === shown ? before.scrollTop : 0;
   const where = D.classes[w.ci].short + ' · ' + D.classes[w.ci].cats[w.ki].name;
   const has = D.hasStars && w.up.length > 0;
   const showStars = D.hasStars && ui.view !== 'drops';
@@ -400,15 +419,23 @@ function renderDetail() {
     const row = (i, label, part) => {
       const u = w.up[i];
       const n = stars[i];
+      const said = esc(u.stat.replace(': ', ', '));
       return '<div class="stat' + (part ? ' stat--part' : '') + '"><div class="stat__main"><span class="stat__label">' + esc(label) + '</span>' +
-        '<span class="stat__stars" role="img" aria-label="' + esc(u.stat) + ': ' + n + ' of ' + u.max + ' stars">' +
+        '<span class="stat__stars" role="img" aria-label="' + said + ': ' + n + ' of ' + u.max + ' stars">' +
           starHtml(i, n, u.max) + '</span></div>' +
-        '<button type="button" class="btn btn--ghost stat__btn" data-act="dec" data-i="' + i + '" aria-label="Remove a star: ' + esc(u.stat) + '"' + (n === 0 ? ' disabled' : '') + '>−</button>' +
-        '<button type="button" class="btn btn--ghost stat__btn" data-act="inc" data-i="' + i + '" aria-label="Add a star: ' + esc(u.stat) + '"' + (n === u.max ? ' disabled' : '') + '>+</button></div>';
+        '<button type="button" class="btn btn--ghost stat__btn" data-act="dec" data-i="' + i + '" aria-label="Remove a star: ' + said + '"' + (n === 0 ? ' disabled' : '') + '>−</button>' +
+        '<button type="button" class="btn btn--ghost stat__btn" data-act="inc" data-i="' + i + '" aria-label="Add a star: ' + said + '"' + (n === u.max ? ' disabled' : '') + '>+</button></div>';
     };
-    const note = (label, text, part) => '<div class="statline' + (part ? ' statline--part' : '') + '"><span class="stat__label">' + esc(label) + '</span>' +
-      '<span class="statline__note">' + esc(text) + '</span></div>';
-    const partName = (line, i) => { const s = w.up[i].stat; return s.indexOf(line.label + ': ') === 0 ? s.slice(line.label.length + 2) : s; };
+    const note = (label, text, part, tip) => '<div class="statline' + (part ? ' statline--part' : '') + '"><span class="stat__label">' + esc(label) + '</span>' +
+      '<span class="statline__note"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + esc(text) + '</span></div>';
+    // What a value is called on a line it shares with another: "Damage" and "Count" on a Damage line.
+    const partName = (line, i) => {
+      const k = line.ups.indexOf(i);
+      if (line.parts && line.parts[k]) return line.parts[k];
+      const s = w.up[i].stat;
+      return s.indexOf(line.label + ': ') === 0 ? s.slice(line.label.length + 2) : s;
+    };
+    const IN_GAME = 'The star the game prints for this line: the average of its values. + is half a star.';
     const drawn = new Set(); // upgrades that have their row already
     w.lines.forEach((line) => {
       const fresh = line.ups.filter((i) => !drawn.has(i));
@@ -417,8 +444,11 @@ function renderDetail() {
       } else if (line.ups.length === 1) { // the game shows this value on a second line (Shot Speed and Range)
         html += note(line.label, gameStar(w, line, stars) + ' · same as ' + w.up[line.ups[0]].stat, false);
       } else { // several values on one line: the game shows one star for them, their average
-        html += note(line.label, 'In game: ' + gameStar(w, line, stars) + (fresh.length ? '' : ' · set above'), false);
-        line.ups.forEach((i) => { html += drawn.has(i) ? (fresh.length ? note(partName(line, i), '☆★'[+(stars[i] === w.up[i].max)] + stars[i] + ' · set above', true) : '') : row(i, partName(line, i), true); });
+        html += note(line.label, 'In game: ' + gameStar(w, line, stars) + (fresh.length ? '' : ' · set above'), false, IN_GAME);
+        line.ups.forEach((i) => {
+          if (!drawn.has(i)) html += row(i, partName(line, i), true);
+          else if (fresh.length) html += note(partName(line, i), '☆★'[+(stars[i] === w.up[i].max)] + stars[i] + ' · same as ' + w.up[i].stat, true);
+        });
       }
       fresh.forEach((i) => drawn.add(i));
     });
@@ -426,6 +456,8 @@ function renderDetail() {
     html += dropsHtml(w);
   }
   box.innerHTML = html + '</div>';
+  box.dataset.shown = shown;
+  if (keepTop) box.querySelector('.stats').scrollTop = keepTop;
 }
 
 // Keep keyboard focus on the same control after a re-render.
@@ -441,6 +473,8 @@ function restoreFocus(f) {
   let match = same.filter((el) => (f.id === undefined || el.dataset.id === f.id) && (f.i === undefined || el.dataset.i === f.i))[0];
   // The row left the list (for example it was marked owned under the Missing filter): stay at the same position.
   if (!match && f.id !== undefined && same.length) match = same[Math.min(f.at, same.length - 1)];
+  // "+" at the top or "−" at zero switches off: stay on its neighbour instead of losing the place.
+  if (match && match.disabled && (f.act === 'inc' || f.act === 'dec')) match = document.querySelector('[data-act="' + (f.act === 'inc' ? 'dec' : 'inc') + '"][data-i="' + f.i + '"]');
   if (match && !match.disabled) match.focus({ preventScroll: true });
 }
 
@@ -474,6 +508,7 @@ function undoTo(snap) {
 }
 
 // ---------- Actions ----------
+const CHANGES = ['own', 'all', 'ownsel', 'inc', 'dec', 'star', 'max', 'clear']; // actions that change progress
 function leaveSearch() {
   query = '';
   $('#q').value = '';
@@ -484,6 +519,9 @@ function act(name, el) {
   const id = el.dataset.id;
   const i = el.dataset.i !== undefined ? Number(el.dataset.i) : -1;
   const w = byId.get(cursorId);
+  // An Undo that is still on offer puts everything back to how it was before its change. Once
+  // something else is changed it is withdrawn, or it would take that later change back too.
+  if (toastAction && toastAction.label === 'Undo' && CHANGES.indexOf(name) !== -1) hideToast();
   switch (name) {
     case 'tab':
       if (i === ui.cls && !query && !pickerOpen) return; // already here
@@ -555,6 +593,7 @@ function act(name, el) {
   }
   render();
   if (moves) restoreScroll();
+  if (name === 'filter') $('#list').scrollTop = 0;
   saveSoon();
 }
 
@@ -653,16 +692,20 @@ async function boot() {
   D.classes.forEach((c, ci) => c.cats.forEach((k, ki) => {
     k.items = k.items.map((t) => {
       const w = {
-        id: t[0], name: t[1], lname: t[1].toLowerCase(), level: t[2], src: t[3],
+        id: t[0], name: t[1], lname: plain(t[1]), level: t[2], src: t[3],
         up: (t[4] || []).map((u) => ({ stat: D.stats[u[0]], max: u[1] })), ci, ki,
       };
       // The lines of the game's equipment screen that carry a star, in the game's order: its label and the
       // upgrades it shows. Saved stars stay in the data's own order (the "up" list); this is only for display.
       // Data without lines (an older copy during an update): every upgrade is its own line.
       const listed = new Set();
-      w.lines = (t[5] || []).map((l) => ({ label: D.stats[l[0]], ups: (l[1] || []).filter((i) => w.up[i]) })).filter((l) => l.label && l.ups.length);
+      w.lines = (t[5] || []).map((l) => {
+        const at = (l[1] || []).map((i, k) => [i, k]).filter((p) => w.up[p[0]]);
+        // parts: what each value is called on this line (only for lines with several values)
+        return { label: D.stats[l[0]], ups: at.map((p) => p[0]), parts: l[2] ? at.map((p) => D.stats[l[2][p[1]]]) : null };
+      }).filter((l) => l.label && l.ups.length);
       w.lines.forEach((l) => l.ups.forEach((i) => listed.add(i)));
-      w.up.forEach((u, i) => { if (!listed.has(i)) w.lines.push({ label: u.stat, ups: [i] }); });
+      w.up.forEach((u, i) => { if (!listed.has(i)) w.lines.push({ label: u.stat, ups: [i], parts: null }); });
       all.push(w);
       byId.set(w.id, w);
       return w;

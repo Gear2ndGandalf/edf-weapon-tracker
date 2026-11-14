@@ -7,8 +7,8 @@ Track weapon and vehicle unlocks for **Earth Defense Force 4.1, 5 and 6**, per c
 ## Pages
 | File | What it is |
 |---|---|
-| `index.html` | HQ: progress for all three games, export and import |
-| `edf41.html` | EDF 4.1 – owned checklist |
+| `index.html` | HQ: progress for all three games, profiles, display settings, export and import, Import from game save |
+| `edf41.html` | EDF 4.1 – owned checklist and drops |
 | `edf5.html`, `edf6.html` | EDF 5 / EDF 6 – owned checklist plus star upgrades |
 
 ## Deploying on GitHub Pages
@@ -67,7 +67,7 @@ Data item format: `[id, name, level, source, upgrades, lines]`; source `0` base,
 Written for browsers released since spring 2021: Safari and iOS 14.5+, Chrome and Edge 84+, Firefox 83+, Samsung Internet 14+. The JavaScript is ES2017 syntax in ES modules. On older browsers the layout loses its spacing (flex `gap`) and some background effects.
 
 ## Data source
-Weapon names, levels and drop tables come from [edf-calc](https://github.com/zeddidragon/edf-calc) by Tony Sæle (zeddidragon), its sole contributor.
+Weapon names, levels and drop tables come from [edf-calc](https://github.com/zeddidragon/edf-calc) by Tony Sæle (zeddidragon), its sole contributor. One name is corrected: EDF 5's "Elerctormagnetic Prison" is listed as Electromagnetic Prison.
 
 The layout of the games' PC save files, used by Import from game save, was first described in [EDFSaveEditor](https://github.com/FevGrave/EDFSaveEditor) by FevGrave (public domain, CC0). Each game's layout was then checked against real saves. The tracker only reads a save; it never changes one, and the file never leaves the device.
 

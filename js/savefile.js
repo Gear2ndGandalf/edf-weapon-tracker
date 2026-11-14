@@ -109,7 +109,7 @@ export const hasStarLevels = (game) => !!SAVES[game] && SAVES[game].rowSize >= 1
 
 export function wrongFile(game) {
   const fmt = SAVES[game];
-  return fail('That is not the right file: ' + fmt.file + ' for this game is ' + fmt.size.toLocaleString('en-US') + ' bytes. Choose ' + fmt.file + ' from a saveslot folder, and check that the Game above is the right one.');
+  return fail('That is not the right file: ' + fmt.file + ' for this game is ' + fmt.size.toLocaleString('en-US') + ' bytes. Choose ' + fmt.file + ' from a saveslot folder of EDF 4.1, 5 or 6.');
 }
 
 // Star levels of one weapon, in the tracker's own order of upgrades. `where` comes from the map
@@ -156,7 +156,7 @@ export async function readSave(game, data) {
   }
   const view = new DataView(plain.buffer, plain.byteOffset, plain.byteLength);
   const magic = String.fromCharCode(plain[0], plain[1], plain[2], plain[3]);
-  if (magic !== 'MDB0') throw fail('That file is not ' + name + ' from this game. Choose ' + name + ' from a saveslot folder, and check that the Game above is the right one.');
+  if (magic !== 'MDB0') throw fail('That file is not ' + name + ' from this game. Choose ' + name + ' from a saveslot folder of that game.');
   if (view.getUint32(4, true) !== fmt.format || view.getUint32(8, true) !== fmt.size - fmt.body) {
     throw fail('This save is in a format the tracker does not know yet (the game may have been updated). Nothing was changed.');
   }

@@ -340,7 +340,8 @@ async def run(browser) -> None:
     await pg.goto(BASE + "index.html")
     said = await pg.locator("#notice").inner_text()
     await pg.reload()
-    check("Updated to " + version in said and "New:" in said and not await pg.locator("#notice").is_visible(), "HQ lists what is new once, also when a game page met the update first")
+    first_news = await pg.evaluate("self.APP_NEWS[0]")
+    check("Updated to " + version + ". " + first_news + ". " in said and not await pg.locator("#notice").is_visible(), "HQ lists what is new once, also when a game page met the update first")
     # someone who has never used the tracker is not told about an update
     cnew = await browser.new_context(viewport=PHONE)
     pnew = await cnew.new_page()
@@ -460,7 +461,7 @@ async def run(browser) -> None:
     LINES = "[...document.querySelectorAll('#detail .stat, #detail .statline')].map((r) => r.querySelector('.stat__label').textContent.trim() + (r.classList.contains('stat') ? '' : ' [' + r.querySelector('.statline__note').textContent.trim() + ']'))"
     for g, name, expect in (("edf6", "Lightning Bow", ["Capacity", "ROF", "Damage", "Shot Speed", "Range [☆0 · same as Shot Speed]", "Energy Cost", "Charge Time"]),
                             ("edf5", "Vibro Hammer", ["Regular Attack [In game: ☆0]", "Damage", "Range", "Maximum [In game: ☆0 · set above]", "Charge Speed", "Capacity", "Reload"]),
-                            ("edf5", "ME1 Emerald", ["Capacity", "ROF", "Damage", "Reload Time", "Blast Area", "Lock-on [In game: ☆0]", "Range", "Capacity [☆0 · set above]", "Lock-on Time"]),
+                            ("edf5", "ME1 Emerald", ["Capacity", "ROF", "Damage", "Reload Time", "Blast Area", "Lock-on [In game: ☆0]", "Range", "Targets [☆0 · same as Capacity]", "Lock-on Time"]),
                             ("edf5", "Spark Vine Y3", ["Capacity", "Damage [In game: ☆0]", "Damage", "Count", "Range", "Energy Cost", "Charge Time"]),
                             ("edf5", "PA-11", ["Capacity", "ROF", "Damage", "Reload Time", "Range", "Shot Speed [☆0 · same as Range]", "Accuracy"])):
         await pg.goto(BASE + g + ".html")
@@ -481,6 +482,39 @@ async def run(browser) -> None:
             await pg.locator('.row.is-cur .box').click()
             await pg.wait_for_timeout(400)
         check(listed[name] == expect, f"{name}: upgrades are listed as on the game's equipment screen {listed[name]}")
+    # names the game writes with two spaces or a full-width letter are found by typing what is on screen
+    finds = {}
+    for typed, name in (("hs99 bound", "HS99  Bound Gun"), ("stardust cannon a", "Stardust Cannon Ａ"), ("STARDUST   cannon", "Stardust Cannon Ａ")):
+        await pg.fill("#q", typed)
+        finds[typed] = " ".join(name.split()) in [" ".join(t.splitlines()[0].split()) for t in await pg.locator(".row__name").all_inner_texts()]
+    await pg.fill("#q", "zzzz")
+    check(all(finds.values()) and (await pg.locator("#list .empty").inner_text()).strip().endswith("Check the spelling."), f"search finds names whatever their spacing or letter width, and its hint does not point at a filter that is already All {finds}")
+    # a value of a Lock-on line that has its row elsewhere is named for what it is on that line
+    notes = {}
+    for name in ("Mirage 5-Way", "Haytal Multi-Missile Launcher"):
+        await pg.fill("#q", name)
+        await pg.locator(".row__name").first.click()
+        notes[name] = [n for n in await pg.evaluate(LINES) if "same as" in n]
+    check(notes == {"Mirage 5-Way": ["Targets [☆0 · same as Damage: Count]"], "Haytal Multi-Missile Launcher": ["Count [☆0 · same as Lock-on: Targets]"]}, f"repeated values are named by their part on the line {notes}")
+    # a change far down the list of upgrades must not send the list back to the top (the panel is redrawn on every change)
+    await pg.fill("#q", "ME1 Emerald")
+    await pg.locator(".row__name").first.click()
+    SCROLLED = "document.querySelector('#detail .stats').scrollTop"
+    await pg.evaluate("const s = document.querySelector('#detail .stats'); s.scrollTop = s.scrollHeight")
+    down = await pg.evaluate(SCROLLED)
+    await pg.locator('#detail [data-act="inc"]').last.click()
+    await pg.wait_for_timeout(200)
+    after_tap = await pg.evaluate(SCROLLED)
+    await pg.locator('#detail .stat').last.locator('.stat__stars i').nth(2).click()
+    after_star = await pg.evaluate(SCROLLED)
+    await pg.locator('[data-act="clear"]').click()
+    await pg.locator('.row.is-cur .box').click()
+    await pg.wait_for_timeout(300)
+    await pg.evaluate("const s = document.querySelector('#detail .stats'); s.scrollTop = s.scrollHeight")
+    await pg.fill("#q", "PA-11")
+    await pg.locator(".row__name").first.click()
+    check(down > 20 and after_tap == down and after_star == down and await pg.evaluate(SCROLLED) == 0,
+          f"the list of upgrades stays where it was scrolled to while stars are changed, and starts at the top for another weapon ({down}, {after_tap}, {after_star})")
     tapped = await pg.evaluate("""() => { const rows = [...document.querySelectorAll('.stat')]; const reload = rows.find((r) => r.querySelector('.stat__label').textContent === 'Reload Time');
         reload.querySelector('[data-act=inc]').click(); return +reload.querySelector('[data-act=inc]').dataset.i; }""")
     await pg.wait_for_timeout(400)
@@ -511,6 +545,89 @@ async def run(browser) -> None:
     await pg.wait_for_timeout(400)
     await pg.goto(BASE + "index.html")
     await pg.locator("#textAuto").click()
+    # slanted text leans out of its box on the right; boxes that clip their text must leave room for the last letter
+    CUT = """() => { const c = document.createElement('canvas').getContext('2d'); const out = {};
+        document.querySelectorAll('.titlebar h1, .tab__name, .catbtn__text, .pill--profile, .row__sub, .detail__meta').forEach((el) => {
+            const cs = getComputedStyle(el); const text = cs.textTransform === 'uppercase' ? el.textContent.trim().toUpperCase() : el.textContent.trim();
+            if (!text || !el.getClientRects().length || el.scrollWidth > el.clientWidth + 1) return;  // empty, hidden, or shortened with "…" anyway
+            const r = document.createRange(); r.selectNodeContents(el); const right = Math.max(...[...r.getClientRects()].map((x) => x.right));
+            c.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+            const m = c.measureText(text.slice(-1)); const cut = right + Math.max(0, m.actualBoundingBoxRight - m.width) - el.getBoundingClientRect().right;
+            const k = el.className.split(' ')[0] || el.tagName; out[k] = Math.max(out[k] || 0, Math.round(cut * 10) / 10); });
+        return out; }"""
+    slant = {}
+    for font in ("default", "orbitron", "mono"):
+        cit = await browser.new_context(viewport=PHONE)
+        pit = await cit.new_page()
+        await watch(pit, errors, external)
+        await pit.add_init_script("localStorage.setItem('edfTracker.prefs', JSON.stringify({ type: { edf6: { font: '%s', italic: true, caps: true, bold: true } } }))" % font)
+        await pit.goto(BASE + "edf6.html")
+        await pit.wait_for_selector(".row")
+        await pit.evaluate("document.fonts.ready")
+        await pit.wait_for_timeout(200)
+        await pit.locator(".row__name").nth(1).click()
+        slant[font] = await pit.evaluate(CUT)
+        await cit.close()
+    check(all({'H1', 'tab__name', 'catbtn__text'} <= set(v) and max(v.values()) <= 0.5 for v in slant.values()), f"italic text is not cut off on the right in the class tabs, the category button or the title {slant}")
+    # ---- edits under a filter, Undo, focus, short screens, and opening a game without changing anything
+    cfx = await browser.new_context(viewport=PHONE)
+    pfx = await cfx.new_page()
+    await watch(pfx, errors, external)
+    await pfx.goto(BASE + "edf5.html")
+    await pfx.wait_for_selector(".row")
+    await pfx.locator(".row__name").nth(3).click()
+    await pfx.wait_for_timeout(400)
+    await pfx.goto(BASE + "index.html")
+    untouched = await pfx.evaluate("[localStorage.getItem('edfTracker.edf5'), localStorage.getItem('edfTracker.lastChange')]")
+    check(untouched == [None, None], f"opening a game and looking at a weapon is not a change to progress {untouched}")
+    await pfx.goto(BASE + "edf5.html")
+    await pfx.wait_for_selector(".row")
+    await pfx.locator('[data-act="filter"][data-i="1"]').click()  # Missing
+    await pfx.locator(".row__name").nth(5).click()
+    picked = (await pfx.locator("#detail .detail__name").inner_text()).strip()
+    for _ in range(4):  # the first tap marks it owned, which takes it out of the Missing list; the panel must stay on it
+        await pfx.locator("#detail .stat").first.locator('[data-act="inc"]').click()
+    await pfx.wait_for_timeout(400)
+    after = json.loads(await pfx.evaluate("localStorage.getItem('edfTracker.edf5')"))
+    check(len(after["owned"]) == 1 and list(after["stars"]) == after["owned"] and max(after["stars"][after["owned"][0]]) == 4
+          and (await pfx.locator("#detail .detail__name").inner_text()).strip() == picked,
+          f"under Missing, repeated taps keep changing the weapon that was picked, not the next one in the list {after}")
+    # keyboard: "+" at the top switches off, and the focus moves to its "−" instead of being lost
+    plus = pfx.locator("#detail .stat").first.locator('[data-act="inc"]')
+    await plus.focus()
+    for _ in range(12):
+        if await plus.is_disabled():
+            break
+        await pfx.keyboard.press("Enter")
+    on = await pfx.evaluate("document.activeElement && document.activeElement.dataset ? [document.activeElement.dataset.act, document.activeElement.dataset.i] : null")
+    check(on is not None and on[0] == "dec" and await plus.is_disabled(), f"the focus stays on the star buttons when one of them switches off {on}")
+    # Undo takes back one change; once something else is changed it is no longer offered
+    await pfx.locator('[data-act="filter"][data-i="0"]').click()
+    await pfx.locator('[data-act="clear"]').click()
+    offered = await pfx.locator("#toastundo").is_visible()
+    await pfx.locator(".box").nth(2).click()
+    await pfx.wait_for_timeout(400)
+    after = json.loads(await pfx.evaluate("localStorage.getItem('edfTracker.edf5')"))
+    check(offered and not await pfx.locator("#toast").is_visible() and len(after["owned"]) == 2 and after["stars"] == {},
+          f"Undo is withdrawn once something else is changed, so it cannot take that back too {after}")
+    await cfx.close()
+    # a phone screen too short to show the panel's list scrolls as a page instead of leaving a sliver
+    short = {}
+    for size in ((390, 664), (375, 629), (360, 640)):
+        csh = await browser.new_context(viewport={"width": size[0], "height": size[1]})
+        psh = await csh.new_page()
+        await watch(psh, errors, external)
+        await psh.goto(BASE + "edf6.html")
+        await psh.wait_for_selector(".row")
+        fit_first = not await psh.evaluate("document.documentElement.classList.contains('no-fit')")
+        await psh.fill("#q", "ME1 Emerald")
+        await psh.locator(".row__name").first.click()
+        await psh.wait_for_timeout(200)
+        short[size] = await psh.evaluate("""() => { const s = document.querySelector('#detail .stats'); const rows = [...s.querySelectorAll('.stat')];
+            return { scrolls: document.documentElement.classList.contains('no-fit'), list: s.clientHeight, rows: rows.length, cut: s.scrollHeight - s.clientHeight }; }""")
+        short[size]["fit_first"] = fit_first
+        await csh.close()
+    check(all(v["scrolls"] and v["cut"] <= 1 and v["rows"] >= 5 for v in short.values()), f"on short phone screens an opened weapon shows its upgrades in a scrolling page {short}")
     # damaged or hand-edited settings never stop a page from loading; a game's own large size also gets the scrolling layout
     cbad = await browser.new_context(viewport=PHONE)
     pbad = await cbad.new_page()
@@ -685,7 +802,7 @@ async def run(browser) -> None:
         name: document.querySelector('#segProfile .slot[data-slot=pc2] .slot__name').textContent, names: JSON.parse(localStorage.getItem('edfTracker.slotNames')),
         polluted: ({}).owned !== undefined || ({}).pc1 !== undefined, imgs: document.querySelectorAll('img').length })""")
     n6 = hostile["names"]["edf6"]
-    check(hostile["keys"] == [] and hostile["pc2"] == {"owned": ["aWeapon001"], "stars": {}} and hostile["con3"] == {"owned": [], "stars": {}} and hostile["name"] == "<img src=x onerr" == n6["pc2"]
+    check(hostile["keys"] == [] and hostile["pc2"] == {"owned": ["aWeapon001"], "stars": {}} and hostile["con3"] in (None, {"owned": [], "stars": {}}) and hostile["name"] == "<img src=x onerr" == n6["pc2"]
           and n6["con3"] == "Console 3" and "pc9" not in n6 and sorted(hostile["names"]) == ["edf41", "edf5", "edf6"] and not hostile["polluted"] and hostile["imgs"] == 0,
           f"profiles and names in an import are cleaned: unknown games and slots are ignored, names are cut to 16 characters and shown as text {hostile['keys']} {hostile['name']!r}")
     await p2.goto(BASE + "edf6.html")
@@ -870,14 +987,18 @@ async def run(browser) -> None:
         save_map = json.loads((ROOT / "data" / f"{g}-save.json").read_text(encoding="utf-8"))
         items = {it[0]: it for c in data["classes"] for k in c["cats"] for it in k["items"]}
         ups_of[g] = {w: [(data["stats"][s], m) for s, m in (it[4] if len(it) > 4 else [])] for w, it in items.items()}
-        lines_of[g] = {w: [(data["stats"][l], us) for l, us in (it[5] if len(it) > 5 else [])] for w, it in items.items()}
+        lines_of[g] = {w: [(data["stats"][ln[0]], ln[1]) for ln in (it[5] if len(it) > 5 else [])] for w, it in items.items()}
+        # a line with several values also names what each one is on that line
+        roles_of = {w: [[data["stats"][i] for i in ln[2]] if len(ln) > 2 else None for ln in (it[5] if len(it) > 5 else [])] for w, it in items.items()}
         steps_of[g] = {w: {slot: steps for slot, _, steps in rows_} for w, rows_ in facts.items()}
         slot_of[g], wrong = {}, []
         for w, ups in ups_of[g].items():
             by_name = {name: slot for slot, name in upgrade_names(shown.get(w, []), {slot: kind for slot, kind, _ in facts.get(w, [])}).items()}
             slot_of[g][w] = [by_name.get(name) for name, _ in ups]
             want_lines = [(label, [slot_of[g][w].index(slot) if slot in slot_of[g][w] else None for slot in slots]) for label, slots in shown.get(w, [])]
-            if (None in slot_of[g][w] or sorted(slot_of[g][w]) != sorted(steps_of[g].get(w, {})) or lines_of[g][w] != want_lines
+            kinds = {slot: kind for slot, kind, _ in facts.get(w, [])}
+            want_roles = [None if len(slots) == 1 else [("Targets" if label.startswith("Lock-on") and kinds[s] >> 2 in (0, 1) else PART[kinds[s] >> 2]) for s in slots] for label, slots in shown.get(w, [])]
+            if (None in slot_of[g][w] or sorted(slot_of[g][w]) != sorted(steps_of[g].get(w, {})) or lines_of[g][w] != want_lines or roles_of[w] != want_roles
                     or any(most != max(5, steps_of[g][w][slot]) for (_, most), slot in zip(ups, slot_of[g][w]))):
                 wrong.append(w)
         described = ["".join(str(slot) + "0123456789a"[steps_of[g][w][slot]] for slot in slot_of[g][w]) for w in save_map["rows"]]

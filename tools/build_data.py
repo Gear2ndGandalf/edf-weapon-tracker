@@ -12,8 +12,10 @@ Usage (from the repository root):
 Output item format: [id, name, level, source, upgrades, lines]
     source   0 base, 1 starter, 2 DLC/bonus, 3 Mission Pack 1, 4 Mission Pack 2
     upgrades [[statIndex, maxStars], ...]  (only for games with star upgrades)
-    lines    [[statIndex, [upgrade, ...]], ...]  the lines of the game's equipment screen that
-             carry a star, in the game's order: the line's label and which upgrades it shows
+    lines    [[statIndex, [upgrade, ...], [statIndex, ...]?], ...]  the lines of the game's
+             equipment screen that carry a star, in the game's order: the line's label and which
+             upgrades it shows. A line with several values also says what each one is on that
+             line (Damage, Count, Range, Targets)
 Drop tables: drops = [{name, pack, missions, diffs: [[lowLevels], [highLevels]] per difficulty}]
 
 Star upgrades use two sets of facts taken from the games' own files (EDF 5 and EDF 6):
@@ -59,9 +61,14 @@ PART_LABELS = {0: "Capacity", 1: "Count", 2: "Damage", 3: "Accuracy", 4: "Range"
                8: "Blast Area", 9: "Range", 10: "Lock-on Time", 11: "Energy Cost", 20: "Speed"}
 
 
-def part_label(line: str, code: int) -> str:
+def part_name(line: str, code: int) -> str:
+    """What a value is on a line it shares with another: Damage, Count, Range, Targets."""
     kind = code >> 2
-    part = "Targets" if line.startswith("Lock-on") and kind in (0, 1) else PART_LABELS[kind]
+    return "Targets" if line.startswith("Lock-on") and kind in (0, 1) else PART_LABELS[kind]
+
+
+def part_label(line: str, code: int) -> str:
+    part = part_name(line, code)
     return line if part == line else f"{line}: {part}"
 
 
@@ -178,7 +185,9 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
                     places[w["id"]] = "".join(str(slot) + DIGITS[steps] for slot, steps, _ in order)
                     if ups:
                         item.append(ups)
-                        item.append([[stat_index(label), [at[slot] for slot in slots]] for label, slots in shown])
+                        item.append([[stat_index(label), [at[slot] for slot in slots]] if len(slots) == 1 else
+                                     [stat_index(label), [at[slot] for slot in slots], [stat_index(part_name(label, code_of[slot])) for slot in slots]]
+                                     for label, slots in shown])
                 items.append(item)
             cats.append({"name": header["names"]["en"], "items": items})
         classes.append({"name": full, "short": short, "cats": cats})

@@ -25,7 +25,9 @@ a { color: var(--link); }
    typed. Bold is drawn as a thin outline in the text colour, which works the same for every
    font, including those with a single weight. */
 html.type-italic body { font-style: italic; }
-html.type-italic .titlebar h1 { padding-right: .14em; } /* room for the slant of the last letter */
+/* Slanted letters lean out of their box on the right, and a box that clips its text cuts the last one. Give them room. */
+html.type-italic .titlebar h1, html.type-italic .tab__name, html.type-italic .catbtn__text, html.type-italic .pill--profile,
+html.type-italic .row__sub, html.type-italic .detail__meta { padding-right: .3em; }
 html.type-caps body, html.type-caps button, html.type-caps .search input::placeholder { text-transform: uppercase; }
 html.type-bold body { -webkit-text-stroke: 0.022em currentColor; }
 
