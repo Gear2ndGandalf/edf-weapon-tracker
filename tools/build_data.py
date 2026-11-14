@@ -11,7 +11,9 @@ Usage (from the repository root):
 
 Output item format: [id, name, level, source, upgrades, lines]
     source   0 base, 1 starter, 2 DLC/bonus, 3 Mission Pack 1, 4 Mission Pack 2
-    upgrades [[statIndex, maxStars], ...]  (only for games with star upgrades)
+    upgrades [[statIndex, maxStars, steps?], ...]  (only for games with star upgrades). "steps" is
+             written only for an upgrade with fewer than 5 steps: the game can show such an upgrade
+             only at some stars (4 steps: 0 1 2 3 5, 3 steps: 0 1 3 5, 2 steps: 0 2 5, 1 step: 0 5)
     lines    [[statIndex, [upgrade, ...], [statIndex, ...]?], ...]  the lines of the game's
              equipment screen that carry a star, in the game's order: the line's label and which
              upgrades it shows. A line with several values also says what each one is on that
@@ -43,7 +45,12 @@ them, so the positions that saved progress uses never move.
 Slot and steps are written into data/edf5-save.json and data/edf6-save.json ("stars": for each
 save position, two characters per upgrade in the item's order: the slot, then the steps as a
 base-36 digit), which js/savefile.js uses for "Import from game save". The "rows" of those
-files are kept as they are.
+files are kept as they are, except that the rows of the placeholders below are written as ""
+(a save still has a row for them, so every other row keeps its position).
+
+Placeholders: EDF 5 and EDF 6 list "nothing equipped" choices as items ("Empty", "No Equipment",
+"Not Equipped"). They are not weapons and have no upgrades, so they are left out of the data
+(since v1.10.0; REMOVED in js/store.js drops them from progress saved before that).
 """
 import json
 import sys
@@ -81,6 +88,9 @@ DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
 NAME_FIXES = {"Elerctormagnetic": "Electromagnetic"}
 
 GAMES = [("41", "EDF 4.1", False), ("5", "EDF 5", True), ("6", "EDF 6", True)]
+
+# "Nothing equipped" choices that the source lists as items (English names), per game. They are left out.
+PLACEHOLDERS = {"5": {"Empty", "No Equipment", "Not Equipped"}, "6": {"Empty", "No Equipment", "Not Equipped"}}
 
 # edf-calc mode name -> (label, mission pack number; 0 = main game)
 MODES = {"OFF": ("Offline", 0), "ON": ("Online", 0), "DLC1": ("Mission Pack 1", 1), "DLC2": ("Mission Pack 2", 2)}
@@ -120,6 +130,7 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
     places: dict[str, str] = {}   # id -> where its upgrades' stars are in a save (see the note at the top)
     game_lines = json.loads((ROOT / "tools" / "game-lines" / f"edf{key}.json").read_text(encoding="utf-8")) if has_stars else {}
     few = unlisted = 0   # values with fewer than 5 steps; values edf-calc does not list
+    upgradable = 0       # items that have at least one upgrade
 
     def stat_index(label: str) -> int:
         if label not in stats:
@@ -127,6 +138,7 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
         return stats.index(label)
 
     seen_ids: set[str] = set()
+    skipped: set[str] = set()   # ids of the placeholders left out (see PLACEHOLDERS)
     classes = []
     for char, full, short in CLASSES:
         cats = []
@@ -137,8 +149,13 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
             mine.sort(key=lambda w: max(0, w["level"]))  # stable: ties keep the source order
             items = []
             for w in mine:
-                if w["id"] in seen_ids:
+                if w["id"] in seen_ids or w["id"] in skipped:
                     raise SystemExit(f"duplicate weapon id in EDF {key}: {w['id']}")
+                if w["names"]["en"] in PLACEHOLDERS.get(key, ()):
+                    if facts.get(w["id"]) or game_lines.get(w["id"]) or any(isinstance(v, dict) and "lvMax" in v for v in w.values()):
+                        raise SystemExit(f"EDF {key} {w['id']}: a placeholder ({w['names']['en']!r}) has upgrades; it would not be left out safely")
+                    skipped.add(w["id"])
+                    continue
                 seen_ids.add(w["id"])
                 name = w["names"]["en"]
                 for wrong, right in NAME_FIXES.items():
@@ -181,9 +198,12 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
                                 names[slot] = label if len(slots) == 1 else part_label(label, code_of[slot])
                     if len(set(names.values())) != len(names):
                         raise SystemExit(f"EDF {key} {w['id']}: two of its upgrades would get the same name {sorted(names.values())}")
-                    ups = [[stat_index(names[slot]), max(5, steps)] for slot, steps, _ in order]
+                    # [statIndex, maxStars], plus the steps when there are fewer than 5 (the game then shows
+                    # only some stars: level * 5 // steps). Readers that know only the first two still work.
+                    ups = [[stat_index(names[slot]), max(5, steps)] + ([steps] if steps < 5 else []) for slot, steps, _ in order]
                     places[w["id"]] = "".join(str(slot) + DIGITS[steps] for slot, steps, _ in order)
                     if ups:
+                        upgradable += 1
                         item.append(ups)
                         item.append([[stat_index(label), [at[slot] for slot in slots]] if len(slots) == 1 else
                                      [stat_index(label), [at[slot] for slot in slots], [stat_index(part_name(label, code_of[slot])) for slot in slots]]
@@ -198,20 +218,29 @@ def build(calc_dir: Path, key: str, title: str, has_stars: bool) -> int:
     text = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
     save_map = ROOT / "data" / f"edf{key}-save.json"
     before = json.loads(save_map.read_text(encoding="utf-8")) if has_stars else {}
-    rows = before.get("rows", [])
-    if has_stars and set(rows) != seen_ids:  # checked before anything is written, so the two files cannot fall out of step
+    # A placeholder keeps its row in the save map as "" (not a weapon), so every other row keeps its position.
+    rows = ["" if i in skipped else i for i in before.get("rows", [])]
+    old_stars = before.get("stars", [])
+    weapons = [i for i in rows if i]
+    # Checked before anything is written, so the two files cannot fall out of step: every non-empty row is a
+    # weapon of the data, each once, and the empty rows are exactly the placeholders that were left out.
+    if has_stars and (set(weapons) != seen_ids or len(weapons) != len(seen_ids) or rows.count("") != len(skipped)
+                      or any(old_stars[n] for n, i in enumerate(rows) if not i and n < len(old_stars))):
         raise SystemExit(f"data/edf{key}-save.json does not list the same weapons as edf-calc; nothing was written for EDF {key}")
     # Saved progress goes by an upgrade's place in its weapon's list. A place must never change: upgrades may only be added at the end.
-    moved = [i for i, was in zip(rows, before.get("stars", [])) if not places[i].startswith(was)]
+    moved = [i for i, was in zip(rows, old_stars) if i and not places[i].startswith(was)]
     if moved:
         raise SystemExit(f"EDF {key}: the upgrades of {moved[:5]} would change places, which would mix up saved stars; nothing was written")
     (ROOT / "data" / f"edf{key}.json").write_text(text, encoding="utf-8")
     if has_stars:
-        save_map.write_text(json.dumps({"game": "edf" + key, "rows": rows, "stars": [places[i] for i in rows]},
+        save_map.write_text(json.dumps({"game": "edf" + key, "rows": rows, "stars": [places[i] if i else "" for i in rows]},
                                        ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-        print(f"  {title}: {few} upgrades have fewer than 5 steps (the game shows their top as 5 stars); "
-              f"{unlisted} upgrades come from the game files only (edf-calc does not list them)")
-    missing = len(src["weapons"]) - len(seen_ids)
+        print(f"  {title}: {few} upgrades have fewer than 5 steps (the game shows their top as 5 stars; they carry their steps); "
+              f"{unlisted} upgrades come from the game files only (edf-calc does not list them); "
+              f"{upgradable} items have upgrades (UPGRADABLE in js/store.js)")
+    if skipped:
+        print(f"  {title}: left out {len(skipped)} placeholders that are not weapons: {', '.join(sorted(skipped))}")
+    missing = len(src["weapons"]) - len(seen_ids) - len(skipped)
     if missing:
         print(f"  warning: {missing} source weapons were not placed in any category")
     return len(seen_ids)
@@ -224,4 +253,4 @@ if __name__ == "__main__":
     for key, title, has_stars in GAMES:
         total = build(calc, key, title, has_stars)
         print(f"{title}: {total} weapons  ->  data/edf{key}.json")
-    print("If a total changed, update TOTALS in js/store.js. Raise the version in js/version.js before publishing.")
+    print("If a total changed, update TOTALS (and UPGRADABLE) in js/store.js. Raise the version in js/version.js before publishing.")

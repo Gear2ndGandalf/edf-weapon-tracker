@@ -5,12 +5,12 @@
 //   PATCH – fixes and data corrections
 // Changing this number is also what makes phones fetch the new files,
 // so bump it with every published change and add a line to CHANGELOG.md.
-self.APP_VERSION = '1.9.1';
+self.APP_VERSION = '1.10.0';
 
 // Shown once on HQ after a phone updates to this version. Keep it to a few short items.
 self.APP_NEWS = [
-  'Italic text is no longer cut off at the right edge',
-  'The list of upgrades stays where you scrolled it while you change stars',
-  'Under the Missing and To upgrade filters a change no longer lands on the wrong weapon',
-  'If you imported stars with v1.8, import the save again and choose Match the save when it is offered (otherwise Add or Raise stars)',
+  'Upgrades with fewer than five steps now move only through the stars the game can show, such as 0, 1, 3 and 5',
+  'Each upgrade also shows its stars the way the game writes them, for example ☆4 or ★5',
+  'Fully upgraded is now counted out of the weapons that have upgrades, so you can tell when you are done',
+  'The Empty and Not Equipped placeholders are no longer counted as weapons, so EDF 5 and EDF 6 each list four fewer',
 ];

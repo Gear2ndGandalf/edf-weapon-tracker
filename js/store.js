@@ -3,7 +3,7 @@
 //
 // Keys (one set per game: edf41, edf5, edf6):
 //   edfTracker.<game>          { owned: [id, ...], stars: { id: [n, n, ...] } }
-//   edfTracker.summary.<game>  { owned, maxed, total }   (read by the HQ page)
+//   edfTracker.summary.<game>  { owned, maxed, total }   (read by the HQ page; HQ shows TOTALS below as the total)
 //   Those two belong to the profile "PC 1". Each game has eight profiles, one per
 //   save slot: pc1-pc4 and con1-con4. The others keep their own copies under
 //   edfTracker.<slot>.<...>, except Console 1, which uses edfTracker.p2.<...>
@@ -35,9 +35,19 @@
 
 export const GAMES = ['edf41', 'edf5', 'edf6'];
 export const GAME_NAMES = { edf41: 'EDF 4.1', edf5: 'EDF 5', edf6: 'EDF 6' };
-// Fallback totals for the HQ page before a game page has been opened.
-// tools/build_data.py prints the real totals; update these if the data changes.
-export const TOTALS = { edf41: 827, edf5: 1187, edf6: 1564 };
+// How many items each game's data lists (the "owned" totals on HQ), and how many of them have at
+// least one star upgrade (the "fully upgraded" totals). tools/build_data.py prints both;
+// update these if the data changes (tools/test_app.py checks them against the data).
+export const TOTALS = { edf41: 827, edf5: 1183, edf6: 1560 };
+export const UPGRADABLE = { edf41: 0, edf5: 1062, edf6: 1436 };
+// Ids the data no longer lists, per game. Progress saved before they were taken out (and backups or
+// imports made then) can still hold them, so they are dropped whenever progress is read.
+// v1.10.0: the "nothing equipped" placeholders of EDF 5 and 6 (Empty, No Equipment, Not Equipped).
+export const REMOVED = {
+  edf41: [],
+  edf5: ['aSupportNone', 'eVehicleNone', 'hSupportNone0', 'hSupportNone1'],
+  edf6: ['aSupportNone', 'eVehicleNone', 'hSupportNone0', 'hSupportNone1'],
+};
 
 const P = 'edfTracker.';
 const LEGACY_KEYS = ['rangerSave', 'wingdiverSave', 'airraiderSave', 'fencerSave'];
@@ -176,11 +186,23 @@ function cleanStars(obj) {
   return out;
 }
 
+// Takes the ids in REMOVED out of an owned list and a stars object (both are changed in place).
+function dropRemoved(game, owned, stars) {
+  const gone = REMOVED[game] || [];
+  for (const id of gone) {
+    if (owned instanceof Set) owned.delete(id);
+    else for (let k = owned.indexOf(id); k !== -1; k = owned.indexOf(id)) owned.splice(k, 1);
+    delete stars[id];
+  }
+}
+
 // ---------- Progress ----------
 // "slot" is optional everywhere below; the game's active profile is used when it is left out.
 export function loadProgress(game, slot) {
   const o = readJSON(progressKey(game, slot), {});
-  return { owned: new Set(cleanOwned(o && o.owned)), stars: cleanStars(o && o.stars) };
+  const p = { owned: new Set(cleanOwned(o && o.owned)), stars: cleanStars(o && o.stars) };
+  dropRemoved(game, p.owned, p.stars);
+  return p;
 }
 export function saveProgress(game, progress, summary, slot) {
   const key = progressKey(game, slot);
@@ -201,7 +223,9 @@ export function loadSummary(game, slot) {
   return {
     owned,
     maxed: s && Number.isFinite(s.maxed) ? s.maxed : 0,
-    total: s && Number.isFinite(s.total) && s.total > 0 ? s.total : TOTALS[game],
+    // This version's own total comes first: a summary written by an older version can count items
+    // that were taken out since (the placeholders, before v1.10.0).
+    total: TOTALS[game] || (s && Number.isFinite(s.total) && s.total > 0 ? s.total : 0),
   };
 }
 
@@ -246,6 +270,7 @@ export function checkVersion() {
   const to = self.APP_VERSION || '';
   const from = getRaw(P + 'seenVersion');
   if (to && from !== to) setRaw(P + 'seenVersion', to);
+  if (to && !from) setRaw(P + 'newsVersion', to); // a first visit, on any page, has no update to be told about
   return { updated: !!from && !!to && from !== to, from, to };
 }
 // HQ lists what is new once per version. `seen` is what checkVersion just returned there. The list is
@@ -424,6 +449,7 @@ export async function importFile(file) {
         if (!isObject(src)) continue;
         const owned = cleanOwned(src.owned);
         const stars = cleanStars(src.stars);
+        dropRemoved(g, owned, stars); // a backup made before v1.10.0 can hold the placeholders taken out since
         const s = isObject(src.summary) ? src.summary : {};
         const summary = { owned: owned.length, maxed: Number.isFinite(s.maxed) ? s.maxed : 0, total: TOTALS[g] };
         if (!saveProgress(g, { owned: new Set(owned), stars }, summary, slot)) {

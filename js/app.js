@@ -5,7 +5,7 @@
 //   { game, key, hasStars, stats: [statName...],
 //     classes: [{ name, short, cats: [{ name, items: [[id, name, level, source, upgrades?, lines?]] }] }] }
 //   source: 0 base, 1 starter, 2 DLC, 3 Mission Pack 1, 4 Mission Pack 2
-//   upgrades: [[statIndex, maxStars], ...]   (EDF 5 and 6 only)
+//   upgrades: [[statIndex, maxStars, steps?], ...]   (EDF 5 and 6 only; steps only when fewer than 5)
 //   lines: [[statIndex, [upgrade, ...]], ...]   the lines of the game's equipment screen that carry a star
 //   difficulties: [name...], drops: [{ name, pack, missions, diffs: [[lowLevels], [highLevels]] }]
 //
@@ -33,6 +33,7 @@ const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, Number.isInteger(n) ? n :
 let D = null;              // game data
 const all = [];            // every weapon, flat, in menu order
 const byId = new Map();
+let upgradable = 0;        // how many items have at least one upgrade (what "fully upgraded" counts out of)
 const prog = store.loadProgress(GAME, SLOT);
 const savedUI = store.loadUI(GAME);
 const ui = Object.assign({ cls: 0, cat: 0, filter: 0, detailOpen: true, view: 'stars' }, savedUI);
@@ -61,6 +62,30 @@ function withStar(w, i, n) {
   return list;
 }
 const capOf = (w) => w.up.reduce((a, u) => a + u.max, 0);
+// The stars an upgrade can show, lowest first. With fewer than 5 steps the game prints a level as
+// level * 5 // steps, so only some stars are possible (3 steps: 0, 1, 3, 5); null means every star from 0 up.
+function reachable(u) {
+  if (!u.steps) return null;
+  const out = [];
+  for (let level = 0; level <= u.steps; level++) out.push(Math.floor(level * 5 / u.steps));
+  return out;
+}
+// The next star an upgrade can show above (up) or below (down) `n`. A value it cannot show (one entered by
+// hand before v1.10.0) is left as it is until it is changed; then it moves to the next one it can show.
+function stepStar(u, n, up) {
+  const can = reachable(u);
+  if (!can) return clamp(n + (up ? 1 : -1), 0, u.max);
+  const next = up ? can.filter((v) => v > n)[0] : can.filter((v) => v < n).pop();
+  return next === undefined ? clamp(n, 0, u.max) : next;
+}
+// Tapping star k: the lowest star the upgrade can show from k up. Tapping it again (it is already
+// what is shown) steps down to the one below, as tapping the last lit star always did.
+function tapStar(u, n, k) {
+  const can = reachable(u);
+  const want = can ? can.filter((v) => v >= k)[0] : k;
+  if (want === undefined) return clamp(n, 0, u.max);
+  return want === n ? stepStar(u, n, false) : clamp(want, 0, u.max);
+}
 // Text as it is compared in a search: lower case, full-width letters as plain ones, runs of spaces as one.
 const plain = (s) => { const t = String(s); return (t.normalize ? t.normalize('NFKC') : t).replace(/\s+/g, ' ').trim().toLowerCase(); };
 // The star the game prints in front of a line of its equipment screen: the average of the line's upgrades,
@@ -72,6 +97,7 @@ function gameStar(w, line, stars) {
   return (now === top ? '★' : '☆') + Math.floor(now / 10) + (now % 10 ? '+' : '');
 }
 // One element per star. Tapping star k sets the stat to k; tapping the last lit star turns it off.
+// An upgrade with fewer than 5 steps goes to the stars the game can show instead (see tapStar).
 // (The − and + buttons do the same job for keyboards and screen readers.)
 function starHtml(statIndex, lit, max) {
   let html = '';
@@ -276,7 +302,11 @@ window.addEventListener('resize', () => {
 function renderTitle() {
   const s = summary();
   let html = '<span class="pill" title="Owned">' + CHECK + '<span class="sr-only">Owned </span>' + s.owned + '/' + s.total + '</span>';
-  if (D.hasStars) html += '<span class="pill" title="Fully upgraded">' + STAR + '<span class="sr-only">Fully upgraded </span>' + s.maxed + '</span>';
+  // Out of the items that have upgrades: about 120 per game have none, so the owned total can never be reached.
+  if (D.hasStars) {
+    html += '<span class="pill" title="Fully upgraded, out of the ' + upgradable + ' items that have upgrades">' + STAR +
+      '<span class="sr-only">Fully upgraded ' + s.maxed + ' of ' + upgradable + '</span><span aria-hidden="true">' + s.maxed + '/' + upgradable + '</span></span>';
+  }
   // Shown only once this game uses more than one profile, so it is clear whose progress this is.
   if (store.slotsInUse && store.slotsInUse(GAME)) html = '<span class="pill pill--profile" title="Profile (change it on HQ)">' + esc(store.slotNames(GAME)[SLOT]) + '</span>' + html;
   $('#pills').innerHTML = html;
@@ -420,7 +450,10 @@ function renderDetail() {
       const u = w.up[i];
       const n = stars[i];
       const said = esc(u.stat.replace(': ', ', '));
-      return '<div class="stat' + (part ? ' stat--part' : '') + '"><div class="stat__main"><span class="stat__label">' + esc(label) + '</span>' +
+      // Under the label, the value as the game's equipment screen writes it: ☆n, and ★n once it is at the top.
+      // (Screen readers already hear "n of m stars" from the stars.)
+      return '<div class="stat' + (part ? ' stat--part' : '') + '"><div class="stat__main"><span class="stat__head"><span class="stat__label">' + esc(label) + '</span>' +
+        '<span class="stat__game" aria-hidden="true">' + (n === u.max ? '★' : '☆') + n + '</span></span>' +
         '<span class="stat__stars" role="img" aria-label="' + said + ': ' + n + ' of ' + u.max + ' stars">' +
           starHtml(i, n, u.max) + '</span></div>' +
         '<button type="button" class="btn btn--ghost stat__btn" data-act="dec" data-i="' + i + '" aria-label="Remove a star: ' + said + '"' + (n === 0 ? ' disabled' : '') + '>−</button>' +
@@ -565,13 +598,12 @@ function act(name, el) {
     case 'inc':
     case 'dec': {
       if (!w || !w.up[i]) return;
-      setStars(w, withStar(w, i, clamp(starsOf(w)[i] + (name === 'inc' ? 1 : -1), 0, w.up[i].max)));
+      setStars(w, withStar(w, i, stepStar(w.up[i], starsOf(w)[i], name === 'inc')));
       break;
     }
     case 'star': {
       if (!w || !w.up[i]) return;
-      const n = Number(el.dataset.n);
-      setStars(w, withStar(w, i, clamp(starsOf(w)[i] === n ? n - 1 : n, 0, w.up[i].max)));
+      setStars(w, withStar(w, i, tapStar(w.up[i], starsOf(w)[i], Number(el.dataset.n))));
       break;
     }
     case 'max':
@@ -693,8 +725,10 @@ async function boot() {
     k.items = k.items.map((t) => {
       const w = {
         id: t[0], name: t[1], lname: plain(t[1]), level: t[2], src: t[3],
-        up: (t[4] || []).map((u) => ({ stat: D.stats[u[0]], max: u[1] })), ci, ki,
+        // steps: set only for an upgrade with fewer than 5 steps (data without it, an older copy, gives every star)
+        up: (t[4] || []).map((u) => ({ stat: D.stats[u[0]], max: u[1], steps: Number.isInteger(u[2]) && u[2] >= 1 && u[2] < 5 && u[1] === 5 ? u[2] : 0 })), ci, ki,
       };
+      if (w.up.length) upgradable++;
       // The lines of the game's equipment screen that carry a star, in the game's order: its label and the
       // upgrades it shows. Saved stars stay in the data's own order (the "up" list); this is only for display.
       // Data without lines (an older copy during an update): every upgrade is its own line.

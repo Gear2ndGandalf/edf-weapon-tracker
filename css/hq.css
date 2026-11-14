@@ -48,10 +48,16 @@ a { color: #e9e6df; }
 .card__body { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
 .card__top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .card__name { font-size: calc(30px * var(--ts, 1)); line-height: 1.15; }
-.card__meta { position: relative; flex: none; }
-/* The profile in use, shown above the count once a game uses more than one profile. */
-.card__slot { position: absolute; right: 0; bottom: 100%; margin-bottom: 1px; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(11px * var(--ts, 1)); letter-spacing: 1px; opacity: .85; }
-.card__count { display: inline-flex; align-items: center; gap: 5px; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(13px * var(--ts, 1)); }
+/* The count takes the room the name leaves (its two parts go on two lines when that is too little); the name wraps only when even that does not fit. */
+.card__meta { position: relative; flex: 1 1 0; min-width: min-content; }
+/* The profile in use, shown above the count once a game uses more than one profile. It is drawn above the count
+   and takes no height, but it does take width, so a long profile name makes the game's name wrap instead of running into it. */
+.card__slot {
+  display: block; position: relative; top: calc(-1.2em - 1px); height: 1.2em; margin: 0 0 -1.2em auto; line-height: 1.2; max-width: 45vw; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(11px * var(--ts, 1)); letter-spacing: 1px; opacity: .85;
+}
+.card__count { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 2px 10px; font-family: 'Share Tech Mono', ui-monospace, monospace; font-size: calc(13px * var(--ts, 1)); }
+.card__part { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .card__sub { font-size: calc(15px * var(--ts, 1)); line-height: 1.2; }
 .card__bar { height: 6px; }
 .card__bar span { display: block; height: 100%; min-width: 2px; }

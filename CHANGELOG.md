@@ -7,6 +7,26 @@ and shown on the HQ page.
 - **MINOR** – new features
 - **PATCH** – fixes and data corrections
 
+## v1.10.0 – 2026-11-13
+### Changed
+- **Stars follow the game's steps.** An upgrade with fewer than five steps can show only some stars in the game (level × 5 ÷ steps, rounded down): with 4 steps ☆0, ☆1, ☆2, ☆3 and ★5; with 3 steps ☆0, ☆1, ☆3 and ★5; with 2 steps ☆0, ☆2 and ★5; with 1 step ☆0 and ★5. "+", "−" and tapping a star now move only through those. Tapping a star sets the lowest of them from that star up, and tapping it again goes down to the one below, as tapping the last lit star always did. Upgrades with five steps or more work as before, and so do Max and Clear.
+  - Stars entered by hand earlier that the game cannot show (for example 4 on a 4-step upgrade) are left as they are, and shown as they are, until that upgrade is changed. "+" and "−" then go to the next value the game can show.
+- **Fully upgraded has an "out of" number**: ★ n/N on the game pages and on HQ, where N is the number of items in that game that have at least one upgrade (1,062 in EDF 5, 1,436 in EDF 6). About 120 items per game have no upgrades, so the count could never reach the owned total and there was no way to tell when you were done. EDF 4.1 has no stars and shows no such number.
+- **EDF 5 and EDF 6 list four fewer items**: 1,183 instead of 1,187, and 1,560 instead of 1,564. The four "Empty" items of EDF 5 and the "No Equipment" and three "Not Equipped" items of EDF 6 are the games' "nothing equipped" choices, not weapons, and none has upgrades. They are no longer listed or counted. Progress saved earlier, backups and earlier imports that hold them are read without them, and Import from game save never marks them.
+- On HQ, a card's owned and fully upgraded counts go on two lines on a narrow screen instead of squeezing the game's name.
+
+### Added
+- **The game's notation for each upgrade**: under each label in the list of upgrades, the value as the game's equipment screen writes it, ☆4 while it can still go up and ★5 at the top.
+
+### Fixed
+- The first three items left open in v1.9.1 are done: the placeholders counted as weapons, stars for upgrades with fewer than five steps that the game never shows, and "Fully upgraded" without an "out of" number. The other items listed there are still open.
+
+### Notes
+- In `data/edf5.json` and `data/edf6.json` an upgrade with fewer than five steps is now `[statIndex, maxStars, steps]` (269 upgrades in EDF 5, 334 in EDF 6); the others stay `[statIndex, maxStars]`. Pages that read only the first two still work, and a page that gets an older copy without steps lets every star be set, as before.
+- `data/edf5-save.json` and `data/edf6-save.json` keep every position of a save's weapon table; the placeholders' rows now have an empty id. No upgrade changed its place, so saved stars are not affected.
+- New in `js/store.js`: `UPGRADABLE` (the "out of" numbers) and `REMOVED` (ids taken out of the data, dropped whenever progress is read). Progress that held a placeholder is saved again without it the next time its game page is opened, so HQ can then say that progress has changed since the last export.
+- A first visit that started on a game page was greeted on HQ with an "Updated to" note. A first visit now never is.
+
 ## v1.9.1 – 2026-11-13
 ### Fixed
 - **Italic text was cut off at the right edge** of the class tabs (Ranger, W.Diver, A.Raider, Fencer), the category button and, with some fonts, the title. Slanted letters lean out of their box, and those boxes clip their text; they now leave room for the last letter. Seen on phones with Italic switched on for a game.

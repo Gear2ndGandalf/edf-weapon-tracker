@@ -43,6 +43,13 @@ OLD_CHECKLIST = {
     "airraiderSave": {"guidance": 11, "calling-support": 50, "support-equip": 32, "limpet-guns": 31, "stationary": 34, "special-weapons": 24, "tanks": 24, "ground-vehicles": 23, "helicopters": 15, "power-suits": 33},
     "fencerSave": {"cc-strikers": 24, "cc-piercers": 26, "shields": 23, "automatic-artillery": 32, "artillery": 35, "missile-launchers": 23},
 }
+# The "nothing equipped" placeholders that v1.10.0 took out of EDF 5 and 6 ("Empty", "No Equipment", "Not Equipped"):
+# position in the game's save -> the id they had up to v1.9.1.
+PLACEHOLDER_ROWS = {
+    "edf41": {},
+    "edf5": {257: "aSupportNone", 752: "hSupportNone0", 753: "hSupportNone1", 1031: "eVehicleNone"},
+    "edf6": {305: "aSupportNone", 866: "hSupportNone0", 867: "hSupportNone1", 1262: "eVehicleNone"},
+}
 # The games' own save files (PC, Steam), as js/savefile.js reads them. This is written out a second
 # time here on purpose: the sample saves below are built from THIS description, and the keys of
 # EDF 5 and 6 are worked out from the recipe, so a mistake in savefile.js cannot hide by being
@@ -147,21 +154,25 @@ async def run(browser) -> None:
         const stars = [...s.querySelectorAll('i')]; const last = stars[stars.length - 1].getBoundingClientRect();
         return { count: stars.length, filled: s.querySelectorAll('i:not(.off)').length, fits: last.right <= r.right + 0.5, w: last.width }; }""")
     check(drawn["count"] == 7 and drawn["filled"] == 1 and drawn["fits"] and drawn["w"] > 5, "stars are drawn, one filled, none cut off")
-    # tap a star to set the level directly
-    stars = pg.locator(".stat").nth(1).locator(".stat__stars i")
+    # tap a star to set the level directly (an upgrade with 7 steps; those with fewer than 5 are checked further down)
+    stars = pg.locator(".stat").nth(0).locator(".stat__stars i")
     await stars.nth(4).click()
-    check(await pg.locator(".stat").nth(1).locator(".stat__stars i:not(.off)").count() == 5, "tapping the 5th star sets 5 stars")
+    check(await pg.locator(".stat").nth(0).locator(".stat__stars i:not(.off)").count() == 5, "tapping the 5th star sets 5 stars")
     await stars.nth(4).click()
-    check(await pg.locator(".stat").nth(1).locator(".stat__stars i:not(.off)").count() == 4, "tapping the last lit star turns it off")
+    check(await pg.locator(".stat").nth(0).locator(".stat__stars i:not(.off)").count() == 4, "tapping the last lit star turns it off")
     await stars.nth(0).click()
     await stars.nth(0).click()
-    check(await pg.locator(".stat").nth(1).locator(".stat__stars i:not(.off)").count() == 0, "stars can be tapped down to zero")
+    check(await pg.locator(".stat").nth(0).locator(".stat__stars i:not(.off)").count() == 0, "stars can be tapped down to zero")
     await pg.locator('[data-act="max"]').click()
     check(await pg.locator(".row.is-cur .row__title .ico--star").count() == 1, "Max shows the gold star on the row")
-    check((await pg.locator(".pill").nth(1).inner_text()).strip().endswith("1"), "title shows 1 fully upgraded")
+    # fully upgraded is counted out of the items that have upgrades (about 120 per game have none)
+    upg6 = sum(1 for c in json.loads((ROOT / "data" / "edf6.json").read_text(encoding="utf-8"))["classes"] for k in c["cats"] for it in k["items"] if len(it) > 4 and it[4])
+    PILL = """() => { const p = document.querySelectorAll('.pill')[1]; return { shown: p.querySelector('span[aria-hidden="true"]').textContent, said: p.querySelector('.sr-only').textContent }; }"""
+    pill = await pg.evaluate(PILL)
+    check(pill == {"shown": f"1/{upg6}", "said": f"Fully upgraded 1 of {upg6}"} and upg6 == 1436, f"title shows 1 fully upgraded out of the {upg6} items that have upgrades {pill}")
     check(await pg.locator('[data-act="inc"]').first.is_disabled(), "+ is disabled at the star cap")
     await pg.locator(".row.is-cur .box").click()
-    check(await pg.locator(".row.is-cur .row__title .ico--star").count() == 0 and (await pg.locator(".pill").nth(1).inner_text()).strip().endswith("0"), "an unchecked weapon no longer counts as fully upgraded")
+    check(await pg.locator(".row.is-cur .row__title .ico--star").count() == 0 and (await pg.evaluate(PILL))["shown"] == f"0/{upg6}", "an unchecked weapon no longer counts as fully upgraded")
     await pg.locator(".row.is-cur .box").click()
     check(await pg.locator(".row.is-cur .row__title .ico--star").count() == 1, "checking it again brings its stars back")
     await pg.locator('[data-act="clear"]').click()
@@ -286,7 +297,7 @@ async def run(browser) -> None:
     # ---- HQ: counts, export, import, bad files
     await pg.goto(BASE + "index.html")
     await pg.wait_for_timeout(200)
-    check("2/1564" in await pg.locator('[data-count="edf6"]').inner_text(), "HQ shows EDF 6 owned count")
+    check("2/1560" in await pg.locator('[data-count="edf6"]').inner_text(), "HQ shows EDF 6 owned count")
     check("1/827" in await pg.locator('[data-count="edf41"]').inner_text(), "HQ shows EDF 4.1 owned count")
     check("Not exported yet" in await pg.locator("#backup").inner_text(), "HQ reminds you that progress was never exported")
     async with pg.expect_download() as dl:
@@ -318,7 +329,7 @@ async def run(browser) -> None:
     def fully_upgraded(g, stored):
         data = json.loads((ROOT / "data" / f"{g}.json").read_text(encoding="utf-8"))
         return sum(1 for c in data["classes"] for k in c["cats"] for it in k["items"] if len(it) > 4 and it[4] and it[0] in stored["owned"]
-                   and all((stored["stars"].get(it[0], []) + [0] * 9)[i] >= m for i, (_, m) in enumerate(it[4])))
+                   and all((stored["stars"].get(it[0], []) + [0] * 9)[i] >= m for i, m in enumerate(u[1] for u in it[4])))
     real = {g: fully_upgraded(g, json.loads(await pg.evaluate("(g) => localStorage.getItem('edfTracker.' + g) || '{\"owned\":[],\"stars\":{}}'", g))) for g in ("edf5", "edf6")}
     await pg.evaluate("""() => { ['edf5', 'edf6'].forEach((g) => { const s = JSON.parse(localStorage.getItem('edfTracker.summary.' + g) || '{}');
         s.maxed = 7; localStorage.setItem('edfTracker.summary.' + g, JSON.stringify(s)); });
@@ -349,6 +360,16 @@ async def run(browser) -> None:
     await pnew.wait_for_selector("#version")
     await pnew.wait_for_timeout(300)
     check(not await pnew.locator("#notice").is_visible() and await pnew.evaluate("localStorage.getItem('edfTracker.newsVersion')") == version[1:], "a first visit shows no update note")
+    await cnew.close()
+    # the same when the very first page opened is a game page and HQ comes second
+    cnew = await browser.new_context(viewport=PHONE)
+    pnew = await cnew.new_page()
+    await pnew.goto(BASE + "edf5.html")
+    await pnew.wait_for_selector(".row")
+    await pnew.goto(BASE + "index.html")
+    await pnew.wait_for_selector("#version")
+    await pnew.wait_for_timeout(300)
+    check(not await pnew.locator("#notice").is_visible(), "a first visit that starts on a game page shows no update note on HQ either")
     await cnew.close()
 
     # ---- display settings
@@ -520,7 +541,7 @@ async def run(browser) -> None:
     await pg.wait_for_timeout(400)
     pa11 = json.loads(await pg.evaluate("localStorage.getItem('edfTracker.edf5')"))["stars"].get("AssultRifle01")
     pa11_data = [it for c in json.loads((ROOT / "data" / "edf5.json").read_text(encoding="utf-8"))["classes"] for k in c["cats"] for it in k["items"] if it[0] == "AssultRifle01"][0]
-    reload_at = [json.loads((ROOT / "data" / "edf5.json").read_text(encoding="utf-8"))["stats"][s] for s, _ in pa11_data[4]].index("Reload Time")
+    reload_at = [json.loads((ROOT / "data" / "edf5.json").read_text(encoding="utf-8"))["stats"][u[0]] for u in pa11_data[4]].index("Reload Time")
     check(tapped == reload_at and pa11 == [1 if i == reload_at else 0 for i in range(len(pa11_data[4]))], f"a tap in the reordered list changes the stat it is on (Reload Time is upgrade {reload_at} in the data) {pa11}")
     # changing one stat writes the other stats back as they were saved, even a value above what the data allows
     other = 0 if reload_at else 1
@@ -539,12 +560,212 @@ async def run(browser) -> None:
     await pg.locator('[data-act="max"]').click()
     await pg.wait_for_timeout(400)
     pa11 = json.loads(await pg.evaluate("localStorage.getItem('edfTracker.edf5')"))["stars"].get("AssultRifle01")
-    check(pa11 == [m for _, m in pa11_data[4]] + [3, 2], f"Max fills the upgrades it knows and keeps the rest {pa11}")
+    check(pa11 == [u[1] for u in pa11_data[4]] + [3, 2], f"Max fills the upgrades it knows and keeps the rest {pa11}")
     await pg.locator('[data-act="clear"]').click()
     await pg.locator('.row.is-cur .box').click()
     await pg.wait_for_timeout(400)
     await pg.goto(BASE + "index.html")
     await pg.locator("#textAuto").click()
+
+    # ---- upgrades with fewer than 5 steps move only through the stars the game can show
+    totals_now = {"edf41": 827, "edf5": 1183, "edf6": 1560}
+    # The game prints level * 5 // steps for such an upgrade, so these are the only stars it can show (written out, not worked out):
+    REACH = {4: [0, 1, 2, 3, 5], 3: [0, 1, 3, 5], 2: [0, 2, 5], 1: [0, 5]}
+    data5 = json.loads((ROOT / "data" / "edf5.json").read_text(encoding="utf-8"))
+    items5 = [it for c in data5["classes"] for k in c["cats"] for it in k["items"]]
+    upg5 = sum(1 for it in items5 if len(it) > 4 and it[4])
+    short_pick = {}  # steps -> (id, name, upgrade) of the first weapon that has such an upgrade
+    for it in items5:
+        for k, u in enumerate(it[4] if len(it) > 4 else []):
+            if len(u) > 2:
+                short_pick.setdefault(u[2], (it[0], it[1], k))
+    STAT_NOW = """(i) => { const r = document.querySelector('.stat [data-act=inc][data-i="' + i + '"]').closest('.stat');
+        return { lit: r.querySelectorAll('.stat__stars i:not(.off)').length, game: r.querySelector('.stat__game').textContent, label: r.querySelector('.stat__label').textContent,
+                 inc: r.querySelector('[data-act=inc]').disabled, dec: r.querySelector('[data-act=dec]').disabled,
+                 hidden: r.querySelector('.stat__game').getAttribute('aria-hidden'), said: r.querySelector('.stat__stars').getAttribute('aria-label') }; }"""
+    TAP = """(a) => document.querySelector('.stat [data-act=inc][data-i="' + a[0] + '"]').closest('.stat').querySelectorAll('.stat__stars i')[a[1] - 1].click()"""
+    cst = await browser.new_context(viewport=PHONE)
+    pst = await cst.new_page()
+    await watch(pst, errors, external)
+
+    async def open_weapon(page, wid, name):
+        await page.fill("#q", name)
+        await page.locator(f'.row__name[data-id="{wid}"]').click()
+        if await page.locator('[data-act="view"][data-i="0"][aria-pressed="false"]').count():
+            await page.locator('[data-act="view"][data-i="0"]').click()
+
+    async def walk(page, k):
+        """Press + until it switches off, then − until it switches off: the stars shown, and the game's notation on the way up."""
+        first = await page.evaluate(STAT_NOW, k)
+        up, down, notes = [first["lit"]], [], [first["game"]]
+        for _ in range(12):
+            if (await page.evaluate(STAT_NOW, k))["inc"]:
+                break
+            await page.locator(f'.stat [data-act="inc"][data-i="{k}"]').click()
+            now = await page.evaluate(STAT_NOW, k)
+            up.append(now["lit"])
+            notes.append(now["game"])
+        down.append(up[-1])
+        for _ in range(12):
+            if (await page.evaluate(STAT_NOW, k))["dec"]:
+                break
+            await page.locator(f'.stat [data-act="dec"][data-i="{k}"]').click()
+            down.append((await page.evaluate(STAT_NOW, k))["lit"])
+        return up, down, notes
+
+    await pst.goto(BASE + "edf5.html")
+    await pst.wait_for_selector(".row")
+    walked, notes_seen = {}, {}
+    for steps in (4, 3, 2, 1):
+        wid, name, k = short_pick[steps]
+        await open_weapon(pst, wid, name)
+        up, down, notes = await walk(pst, k)
+        walked[steps] = (up, down)
+        notes_seen[steps] = notes
+        await pst.locator('.row.is-cur .box').click()  # its stars are back at 0; unmark it again
+    check(all(walked[st] == (REACH[st], REACH[st][::-1]) for st in REACH),
+          f"+ and − on upgrades with 4, 3, 2 and 1 steps visit exactly the stars the game can show {walked} {[short_pick[s][1] for s in REACH]}")
+    want_notes = {st: ["☆%d" % v for v in REACH[st][:-1]] + ["★5"] for st in REACH}
+    check(notes_seen == want_notes, f"each star row also shows the game's notation, ☆ below the top and ★ at it {notes_seen}")
+    # tapping a star lands on the lowest star the game can show from there; tapping it again steps down, as tapping the last lit star always did
+    wid, name, k = short_pick[3]
+    await open_weapon(pst, wid, name)
+    tapped = []
+    for n in (2, 2, 4, 4, 1, 1, 5):
+        await pst.evaluate(TAP, [k, n])
+        tapped.append((await pst.evaluate(STAT_NOW, k))["lit"])
+    await pst.wait_for_timeout(400)
+    stored3 = await pst.evaluate("(id) => (JSON.parse(localStorage.getItem('edfTracker.edf5')).stars[id] || [])", wid)
+    check(tapped == [3, 1, 5, 3, 1, 0, 5] and all(v in REACH[3] for v in tapped) and stored3[k] == 5,
+          f"tapping a star on a 3-step upgrade lands on a star the game can show {tapped}")
+    now = await pst.evaluate(STAT_NOW, k)
+    check(now["hidden"] == "true" and now["said"].endswith(": 5 of 5 stars") and now["game"] == "★5" and "★" not in now["label"] and "☆" not in now["label"],
+          f"the notation is hidden from screen readers, which hear the stars' own label, and the label holds the label alone {now}")
+    await pst.locator('[data-act="clear"]').click()
+    await pst.locator('.row.is-cur .box').click()
+    # A star entered by hand before v1.10.0 that the game cannot show (4 on a 4-step upgrade) stays as it is until that upgrade is changed
+    wid4, name4, k4 = short_pick[4]
+    ups4 = next(it for it in items5 if it[0] == wid4)[4]
+    n_ups4 = len(ups4)
+    other4 = 0 if k4 else 1
+    other_up = REACH[ups4[other4][2]][1] if len(ups4[other4]) > 2 else 1  # what one + gives the other upgrade
+    await pst.goto(BASE + "index.html")
+    odd = [0] * n_ups4
+    odd[k4] = 4
+    await pst.evaluate("(a) => localStorage.setItem('edfTracker.edf5', JSON.stringify({ owned: [a[0]], stars: { [a[0]]: a[1] } }))", [wid4, odd])
+    await pst.goto(BASE + "edf5.html")
+    await pst.wait_for_selector(".row")
+    await open_weapon(pst, wid4, name4)
+    shown4 = await pst.evaluate(STAT_NOW, k4)
+    await pst.locator(f'.stat [data-act="inc"][data-i="{other4}"]').click()  # another upgrade of the same weapon
+    await pst.wait_for_timeout(400)
+    kept = json.loads(await pst.evaluate("localStorage.getItem('edfTracker.edf5')"))["stars"][wid4]
+    await pst.locator(f'.stat [data-act="inc"][data-i="{k4}"]').click()
+    plus = (await pst.evaluate(STAT_NOW, k4))["lit"]
+    await pst.goto(BASE + "index.html")
+    await pst.evaluate("(a) => { const p = JSON.parse(localStorage.getItem('edfTracker.edf5')); p.stars[a[0]][a[1]] = 4; localStorage.setItem('edfTracker.edf5', JSON.stringify(p)); }", [wid4, k4])
+    await pst.goto(BASE + "edf5.html")
+    await pst.wait_for_selector(".row")
+    await open_weapon(pst, wid4, name4)
+    await pst.locator(f'.stat [data-act="dec"][data-i="{k4}"]').click()
+    minus = (await pst.evaluate(STAT_NOW, k4))["lit"]
+    check(shown4["lit"] == 4 and shown4["game"] == "☆4" and kept[k4] == 4 and kept[other4] == other_up and plus == 5 and minus == 3,
+          f"a star the game cannot show, entered earlier, is shown as stored and kept until changed; + and − then go to the next star the game can show ({shown4['lit']}, kept {kept[k4]}, + {plus}, − {minus})")
+    await pst.locator('[data-act="clear"]').click()
+    await pst.locator('.row.is-cur .box').click()
+    # the title counts fully upgraded weapons out of the items that have upgrades; that number is not stored anywhere
+    pill5 = await pst.evaluate(PILL)
+    await pst.goto(BASE + "index.html")
+    card5 = await pst.locator('[data-count="edf5"]').inner_text()
+    said5 = await pst.evaluate("[...document.querySelectorAll('[data-count=edf5] .sr-only')].map((e) => e.textContent)")
+    card41 = await pst.locator('[data-count="edf41"]').inner_text()
+    stored_all = await pst.evaluate("JSON.stringify(Object.keys(localStorage).filter((k) => /edf(41|5|6)$/.test(k)).map((k) => [k, localStorage.getItem(k)]))")
+    summaries = json.loads(await pst.evaluate("JSON.stringify(Object.keys(localStorage).filter((k) => k.indexOf('summary.') !== -1).map((k) => JSON.parse(localStorage.getItem(k))))"))
+    check(pill5 == {"shown": f"0/{upg5}", "said": f"Fully upgraded 0 of {upg5}"} and upg5 == 1062 and f"0/{upg5}" in card5 and said5 == ["Owned ", f"Fully upgraded 0 of {upg5}"]
+          and card41.count("/") == 1 and str(upg5) not in stored_all and summaries and all(set(v) == {"owned", "maxed", "total"} for v in summaries),
+          f"the game title and HQ show fully upgraded as n/{upg5} (EDF 4.1 shows none), and nothing about it is stored ({pill5}, {card5!r}, {card41!r})")
+    await cst.close()
+    # Data without the third element (an older copy of the weapon list during an update): every star from 0 up, as before
+    cold = await browser.new_context(viewport=PHONE)
+    pold = await cold.new_page()
+    await watch(pold, errors, external)
+    await pold.add_init_script("""const realFetch = window.fetch.bind(window);
+        window.fetch = (url, opts) => (String(url).indexOf('data/edf5.json') === -1 ? realFetch(url, opts)
+            : realFetch(url, opts).then((r) => r.json()).then((d) => { d.classes.forEach((c) => c.cats.forEach((k) => k.items.forEach((t) => { if (t[4]) t[4] = t[4].map((u) => u.slice(0, 2)); })));
+                d.classes[0].cats[0].items.push(['aSupportNone', 'Empty', 0, 1]); return new Response(JSON.stringify(d)); }));""")
+    await pold.goto(BASE + "edf5.html")
+    await pold.wait_for_selector(".row")
+    wid, name, k = short_pick[3]
+    await open_weapon(pold, wid, name)
+    up, down, _ = await walk(pold, k)
+    check(up == [0, 1, 2, 3, 4, 5] and down == [5, 4, 3, 2, 1, 0], f"with weapon data from before v1.10.0 (no steps), + and − still go one star at a time {up} {down}")
+    # that older list still has a placeholder: marking it does no harm, and it is not counted or kept
+    await pold.fill("#q", "Empty")
+    await pold.locator('.box[data-id="aSupportNone"]').click()
+    await pold.goto(BASE + "index.html")
+    old_card = await pold.locator('[data-count="edf5"]').inner_text()
+    old_kept = await pold.evaluate("import('./js/store.js').then((s) => Array.from(s.loadProgress('edf5').owned))")
+    check(f"1/{totals_now['edf5']}" in old_card and old_kept == [wid], f"a placeholder marked on a page with the older list is not counted on HQ and is dropped when progress is read ({old_card!r}, {old_kept})")
+    await cold.close()
+
+    # ---- the notation under each label leaves the row of stars as it was: narrow phones, 150% text, a wide font
+    READOUT = """() => { const out = { rows: 0, cut: 0, wide: 0, overlap: 0, moved: 0 }; const stats = document.querySelector('#detail .stats');
+        const measure = () => [...document.querySelectorAll('#detail .stat .stat__stars')].map((s) => { const b = s.getBoundingClientRect(); return Math.round(b.width * 10) + ':' + Math.round(b.left * 10); });
+        document.querySelectorAll('#detail .stat').forEach((r) => {
+            out.rows++;
+            const s = r.querySelector('.stat__stars').getBoundingClientRect(), stars = [...r.querySelectorAll('.stat__stars i')], last = stars[stars.length - 1].getBoundingClientRect();
+            const g = r.querySelector('.stat__game').getBoundingClientRect(), h = r.querySelector('.stat__head').getBoundingClientRect();
+            if (last.right > s.right + 0.5 || stars.some((i) => i.getBoundingClientRect().width < 5)) out.cut++;
+            if (r.scrollWidth > r.clientWidth + 1 || r.getBoundingClientRect().right > stats.getBoundingClientRect().right + 0.5 || g.right > h.right + 0.5 || g.width < 1) out.wide++;
+            if (g.bottom > s.top + 0.5 && g.top < s.bottom - 0.5 && g.right > s.left + 0.5 && g.left < s.right - 0.5) out.overlap++; });
+        const before = measure();
+        document.querySelectorAll('#detail .stat__game').forEach((e) => { e.style.display = 'none'; });
+        const without = measure();
+        document.querySelectorAll('#detail .stat__game').forEach((e) => { e.style.display = ''; });
+        out.moved = before.filter((m, i) => m !== without[i]).length;
+        return out; }"""
+    WIDE5 = {"edf5": {"font": "orbitron", "size": "same", "bold": True, "italic": False, "caps": True}}
+    readout_bad = []
+    for (w, h), text, type_prefs in (((280, 653), "1", {}), ((320, 568), "1", {}), ((280, 653), "1.5", {}), ((320, 568), "1.5", {}),
+                                     ((280, 653), "1", WIDE5), ((320, 568), "1.5", WIDE5), ((390, 844), "1.5", WIDE5)):
+        c = await browser.new_context(viewport={"width": w, "height": h})
+        p = await c.new_page()
+        await p.add_init_script("localStorage.setItem('edfTracker.prefs', JSON.stringify({text: '%s', fx: 'on', type: %s}))" % (text, json.dumps(type_prefs)))
+        await p.goto(BASE + "edf5.html")
+        await p.wait_for_selector(".row")
+        await p.evaluate("document.fonts.ready")
+        for name in ("Vibro Hammer", "ME1 Emerald"):
+            await p.fill("#q", name)
+            await p.locator(".row__name").first.click()
+            if await p.locator('[data-act="collapse"][aria-expanded="false"]').count():
+                await p.locator('[data-act="collapse"]').click()
+            r = await p.evaluate(READOUT)
+            if not r["rows"] or r["cut"] or r["wide"] or r["overlap"] or r["moved"]:
+                readout_bad.append((w, text, bool(type_prefs), name, r))
+        await c.close()
+    check(not readout_bad, f"the game's notation under each label leaves the row of stars as wide as before and nothing is cut off, at 280 and 320 px, 150% text and a wide font {readout_bad}")
+    # HQ cards: the longer count (owned, and fully upgraded n/N) and a long profile name stay inside the card and clear of the game's name
+    CARDS = """() => [...document.querySelectorAll('.card')].map((c) => { const b = c.querySelector('.card__body'), cs = getComputedStyle(b), n = c.querySelector('.card__name').getBoundingClientRect();
+        const right = b.getBoundingClientRect().right - parseFloat(cs.paddingRight) + 0.5; const bad = [];
+        c.querySelectorAll('.card__part, .card__slot:not([hidden])').forEach((e) => { const r = e.getBoundingClientRect(); if (r.right > right || r.left < n.right - 0.5) bad.push(e.className); });
+        c.querySelectorAll('.card__part').forEach((e) => { if (e.getBoundingClientRect().height > parseFloat(getComputedStyle(e).fontSize) * 2) bad.push('wrapped'); });
+        return bad.join(' '); }).filter((x) => x)"""
+    cards_bad = []
+    for (w, h), text in (((280, 653), "1"), ((280, 653), "1.5"), ((320, 568), "1.5"), ((390, 844), "1.5"), ((390, 844), "1")):
+        c = await browser.new_context(viewport={"width": w, "height": h})
+        p = await c.new_page()
+        await p.add_init_script("""localStorage.setItem('edfTracker.prefs', JSON.stringify({text: '%s', fx: 'on'}));
+            ['edf41', 'edf5', 'edf6'].forEach((g) => localStorage.setItem('edfTracker.slotsUsed.' + g, '1'));
+            localStorage.setItem('edfTracker.slotNames', JSON.stringify({ edf41: { pc1: 'Steam Deck 16c' }, edf5: { pc1: 'WWWWWWWWWWWWWWWW' }, edf6: { pc1: 'Main save' } }));
+            localStorage.setItem('edfTracker.edf6', JSON.stringify({ owned: ['AssultRifle01'], stars: {} }));""" % text)
+        await p.goto(BASE + "index.html")
+        await p.evaluate("document.fonts.ready")
+        bad = await p.evaluate(CARDS)
+        if bad:
+            cards_bad.append((w, text, bad))
+        await c.close()
+    check(not cards_bad, f"HQ cards: counts and profile names stay inside the card and clear of the game's name, at 280, 320 and 390 px and 150% text {cards_bad}")
+
     # slanted text leans out of its box on the right; boxes that clip their text must leave room for the last letter
     CUT = """() => { const c = document.createElement('canvas').getContext('2d'); const out = {};
         document.querySelectorAll('.titlebar h1, .tab__name, .catbtn__text, .pill--profile, .row__sub, .detail__meta').forEach((el) => {
@@ -660,9 +881,9 @@ async def run(browser) -> None:
     st = await pg.evaluate(SLOT_STATE, "edf6")
     check(list(st["names"].values()) == ["PC 1", "PC 2", "PC 3", "PC 4", "Console 1", "Console 2", "Console 3", "Console 4"] and st["pressed"] == ["pc1"] and st["tag"] is None,
           "HQ lists 4 PC and 4 console profiles per game; PC 1 is in use and the card shows no profile name yet")
-    check(st["counts"]["pc1"] == "2/1564" and st["counts"]["con2"] == "Empty", f"each profile shows its own progress {st['counts']}")
+    check(st["counts"]["pc1"] == "2/1560" and st["counts"]["con2"] == "Empty", f"each profile shows its own progress {st['counts']}")
     await pg.locator('#segProfile .slot[data-slot="con2"]').click()
-    check("0/1564" in await pg.locator('[data-count="edf6"]').inner_text(), "a profile that was never used starts empty")
+    check("0/1560" in await pg.locator('[data-count="edf6"]').inner_text(), "a profile that was never used starts empty")
     check(await pg.locator('[data-count="edf41"]').inner_text() == count41, "switching EDF 6's profile leaves the other games alone")
     pg.once("dialog", lambda d: asyncio.ensure_future(d.accept("  Console <b>  ")))
     await pg.locator("#renameProfile").click()
@@ -683,10 +904,10 @@ async def run(browser) -> None:
     check(await pg.locator(".pill--profile").count() == 0, "a game that only uses PC 1 shows no profile name")
     await pg.goto(BASE + "index.html")
     st = await pg.evaluate(SLOT_STATE, "edf6")
-    check("1/1564" in await pg.locator('[data-count="edf6"]').inner_text() and st["game"] == ["edf5"] and st["tag"] == "Console <b>", "HQ shows the progress of each game's profile in use and remembers which game's profiles were listed")
+    check("1/1560" in await pg.locator('[data-count="edf6"]').inner_text() and st["game"] == ["edf5"] and st["tag"] == "Console <b>", "HQ shows the progress of each game's profile in use and remembers which game's profiles were listed")
     await pg.locator('#segGame button[data-game="edf6"]').click()
     st = await pg.evaluate(SLOT_STATE, "edf6")
-    check(st["counts"]["con2"] == "1/1564" and st["counts"]["pc1"] == "2/1564", f"the profile list shows both EDF 6 profiles' progress {st['counts']}")
+    check(st["counts"]["con2"] == "1/1560" and st["counts"]["pc1"] == "2/1560", f"the profile list shows both EDF 6 profiles' progress {st['counts']}")
     async with pg.expect_download() as dl2:
         await pg.click("#export")
     path2 = await (await dl2.value).path()
@@ -704,7 +925,7 @@ async def run(browser) -> None:
     restored = await p7.evaluate("[JSON.parse(localStorage.getItem('edfTracker.con2.edf6')).owned.length, JSON.parse(localStorage.getItem('edfTracker.edf6')).owned.length]")
     await p7.locator('#segGame button[data-game="edf6"]').click()
     st7 = await p7.evaluate(SLOT_STATE, "edf6")
-    check(restored == [1, 2] and st7["names"]["con2"] == "Console <b>" and st7["counts"]["con2"] == "1/1564" and st7["pressed"] == ["pc1"] and st7["tag"] == "PC 1",
+    check(restored == [1, 2] and st7["names"]["con2"] == "Console <b>" and st7["counts"]["con2"] == "1/1560" and st7["pressed"] == ["pc1"] and st7["tag"] == "PC 1",
           f"import restores every profile and its name on another device {st7['counts']}")
     # a file exported by v1.3-v1.4 (two profiles shared by all games) still imports: profile 1 -> PC 1, profile 2 -> Console 1
     old_file = {"app": "edf-unlock-tracker", "version": 1, "appVersion": "1.4.1", "games": {"edf5": {"owned": ["AssultRifle01"], "stars": {}}},
@@ -720,7 +941,7 @@ async def run(browser) -> None:
     await p7.wait_for_timeout(400)
     await p7.locator('#segGame button[data-game="edf5"]').click()
     st7 = await p7.evaluate(SLOT_STATE, "edf5")
-    check("(2 profiles)" in await p7.locator("#notice").inner_text() and st7["names"]["pc1"] == "Steam" and st7["names"]["con1"] == "Console 1" and st7["counts"]["con1"] == "3/1187" and st7["counts"]["pc1"] == "1/1187" and st7["tag"] == "Steam",
+    check("(2 profiles)" in await p7.locator("#notice").inner_text() and st7["names"]["pc1"] == "Steam" and st7["names"]["con1"] == "Console 1" and st7["counts"]["con1"] == "3/1183" and st7["counts"]["pc1"] == "1/1183" and st7["tag"] == "Steam",
           f"a v1.4 export imports into a fresh browser as PC 1 and Console 1 {st7['counts']}")
     # the names v1.3-v1.4 scripts pass ('1' and '2') reach PC 1 and Console 1 until a profile is chosen here, then follow it
     keys = await p7.evaluate("""async () => { const s = await import('./js/store.js'); const out = [s.progressKey('edf5', '1'), s.progressKey('edf5', '2'), s.progressKey('edf5')];
@@ -740,7 +961,7 @@ async def run(browser) -> None:
     await p10.goto(BASE + "index.html")
     await p10.locator('#segGame button[data-game="edf5"]').click()
     st10 = await p10.evaluate(SLOT_STATE, "edf5")
-    check(st10["pressed"] == ["con1"] and st10["names"]["pc1"] == "Storm" and st10["names"]["con1"] == "Deck" and st10["counts"]["con1"] == "2/1187" and st10["tag"] == "Deck" and "2/1187" in await p10.locator('[data-count="edf5"]').inner_text(),
+    check(st10["pressed"] == ["con1"] and st10["names"]["pc1"] == "Storm" and st10["names"]["con1"] == "Deck" and st10["counts"]["con1"] == "2/1183" and st10["tag"] == "Deck" and "2/1183" in await p10.locator('[data-count="edf5"]').inner_text(),
           f"the two profiles of v1.4 become PC 1 and Console 1, with their names, progress and selection {st10['pressed']} {st10['counts']}")
     await p10.goto(BASE + "edf5.html")
     await p10.wait_for_selector(".row")
@@ -781,7 +1002,7 @@ async def run(browser) -> None:
     await p2.goto(BASE + "index.html")
     await p2.set_input_files("#importfile", path)
     await p2.wait_for_timeout(400)
-    check("2/1564" in await p2.locator('[data-count="edf6"]').inner_text(), "import restores progress in a fresh browser")
+    check("2/1560" in await p2.locator('[data-count="edf6"]').inner_text(), "import restores progress in a fresh browser")
     tmp = Path(tempfile.mkdtemp())
     (tmp / "legacy.json").write_text(json.dumps({"version": 1, "data": {"rangerSave": {"assault-rifles": [0, 1, 2], "special-weapons": [0]}, "fencerSave": {"missile-launchers": [0, 1]}}}), encoding="utf-8")
     await p2.set_input_files("#importfile", str(tmp / "legacy.json"))
@@ -916,9 +1137,26 @@ async def run(browser) -> None:
     js_src = (ROOT / "js" / "savefile.js").read_text(encoding="utf-8")
     js_keys = {g: re.search(g + r": \{.*?key: hex\('([0-9a-f]+)'\),\s*counter: hex\('([0-9a-f]+)'\)", js_src, re.S).groups() for g in SAVE_LAYOUT}
     check(all(js_keys[g] == (SAVE_LAYOUT[g]["key"].hex(), SAVE_LAYOUT[g]["counter"].hex()) for g in SAVE_LAYOUT), "the save keys in savefile.js are the ones the documented recipe gives")
-    totals = {"edf41": 827, "edf5": 1187, "edf6": 1564}
+    totals = {"edf41": 827, "edf5": 1183, "edf6": 1560}
+    # The "nothing equipped" placeholders of EDF 5 and 6 are not weapons: not in the data, not counted, and their
+    # rows in the save maps are "" (a save still has those rows, so every other row keeps its position).
+    store_src = (ROOT / "js" / "store.js").read_text(encoding="utf-8")
+    js_const = lambda name: {g: int(n) for g, n in re.findall(r"(edf\d+): (\d+)", re.search(r"export const " + name + r" = \{([^}]*)\}", store_src).group(1))}
+    counted, with_ups, named = {}, {}, {}
+    for g in SAVE_LAYOUT:
+        data = json.loads((ROOT / "data" / f"{g}.json").read_text(encoding="utf-8"))
+        items = [it for c in data["classes"] for k in c["cats"] for it in k["items"]]
+        counted[g] = len(items)
+        with_ups[g] = sum(1 for it in items if len(it) > 4 and it[4])
+        named[g] = [it[0] for it in items if it[1] in ("Empty", "No Equipment", "Not Equipped")]
+    check(js_const("TOTALS") == counted == totals and js_const("UPGRADABLE") == with_ups == {"edf41": 0, "edf5": 1062, "edf6": 1436} and not any(named.values()),
+          f"TOTALS and UPGRADABLE in store.js equal the data, and no placeholder is listed as a weapon {counted} {with_ups} {named}")
+    removed_js = {g: re.findall(r"'([^']+)'", ids) for g, ids in re.findall(r"(edf\d+): \[([^\]]*)\]", re.search(r"export const REMOVED = \{(.*?)\};", store_src, re.S).group(1))}
+    check(removed_js == {g: sorted(PLACEHOLDER_ROWS[g].values()) for g in SAVE_LAYOUT}, f"store.js REMOVED lists exactly the placeholders taken out {removed_js}")
     # Which weapon sits at a few positions of each game's save, as found in real saves (owned starter weapons,
     # weapons seen in a young save), and a fingerprint of each whole list so that it cannot change unnoticed.
+    # The fingerprint is of the list as published up to v1.9.1 (data/<game>-save.json on main), with the
+    # placeholders' ids still in it: put back at their rows, the list must be exactly that one.
     KNOWN = {
         "edf41": ({29: "Weapon028", 66: "Weapon064", 232: "Weapon213", 410: "Weapon384", 608: "Weapon569", 739: "eVehicle_Tank_DcZero"}, "aff6eeef9757de2756ee3c76d509ba28f3a8904491c02750cdb35aafb6ecb1c6"),
         "edf5": ({0: "AssultRifle01", 104: "RocketLauncher01", 327: "pRapier01", 613: "hPileBanker01", 799: "eWeapon001", 979: "eLifeBender"}, "410c4ddac5e689025ddf67777e5d120d5a2c4f6e621e69b3d4da1303acfc9a3b"),
@@ -932,9 +1170,13 @@ async def run(browser) -> None:
         maps[g] = rows
         caps[g] = {it[0]: [u[1] for u in (it[4] if len(it) > 4 else [])] for it in items}
         spots, print_ = KNOWN[g]
-        check(len(rows) == totals[g] and len(set(rows)) == len(rows) and set(rows) == set(caps[g]) and all(rows[i] == w for i, w in spots.items())
-              and hashlib.sha256(json.dumps(rows, separators=(",", ":")).encode()).hexdigest() == print_,
-              f"{g}: the list of save positions names every one of the {totals[g]} weapons once, in the order found in real saves")
+        weapons = [w for w in rows if w]
+        blank = [i for i, w in enumerate(rows) if w == ""]
+        as_published = [PLACEHOLDER_ROWS[g].get(i, w) for i, w in enumerate(rows)]
+        check(len(weapons) == totals[g] and len(set(weapons)) == len(weapons) and set(weapons) == set(caps[g]) and all(rows[i] == w for i, w in spots.items())
+              and blank == sorted(PLACEHOLDER_ROWS[g]) and len(rows) == totals[g] + len(blank) and all(isinstance(w, str) for w in rows)
+              and hashlib.sha256(json.dumps(as_published, separators=(",", ":")).encode()).hexdigest() == print_,
+              f"{g}: the list of save positions names every one of the {totals[g]} weapons once, in the order found in real saves, with an empty row for each placeholder {blank}")
     cs = await browser.new_context(viewport=PHONE)
     ps = await cs.new_page()
     await watch(ps, errors, external)
@@ -986,7 +1228,8 @@ async def run(browser) -> None:
         shown = json.loads((ROOT / "tools" / "game-lines" / f"{g}.json").read_text(encoding="utf-8"))
         save_map = json.loads((ROOT / "data" / f"{g}-save.json").read_text(encoding="utf-8"))
         items = {it[0]: it for c in data["classes"] for k in c["cats"] for it in k["items"]}
-        ups_of[g] = {w: [(data["stats"][s], m) for s, m in (it[4] if len(it) > 4 else [])] for w, it in items.items()}
+        ups_of[g] = {w: [(data["stats"][u[0]], u[1]) for u in (it[4] if len(it) > 4 else [])] for w, it in items.items()}
+        raw_ups = {w: (it[4] if len(it) > 4 else []) for w, it in items.items()}
         lines_of[g] = {w: [(data["stats"][ln[0]], ln[1]) for ln in (it[5] if len(it) > 5 else [])] for w, it in items.items()}
         # a line with several values also names what each one is on that line
         roles_of = {w: [[data["stats"][i] for i in ln[2]] if len(ln) > 2 else None for ln in (it[5] if len(it) > 5 else [])] for w, it in items.items()}
@@ -1001,9 +1244,16 @@ async def run(browser) -> None:
             if (None in slot_of[g][w] or sorted(slot_of[g][w]) != sorted(steps_of[g].get(w, {})) or lines_of[g][w] != want_lines or roles_of[w] != want_roles
                     or any(most != max(5, steps_of[g][w][slot]) for (_, most), slot in zip(ups, slot_of[g][w]))):
                 wrong.append(w)
-        described = ["".join(str(slot) + "0123456789a"[steps_of[g][w][slot]] for slot in slot_of[g][w]) for w in save_map["rows"]]
+        described = ["".join(str(slot) + "0123456789a"[steps_of[g][w][slot]] for slot in slot_of[g][w]) if w else "" for w in save_map["rows"]]
         check(not wrong and save_map.get("stars") == described and hashlib.sha256(json.dumps(save_map["stars"], separators=(",", ":")).encode()).hexdigest() == STAR_PRINTS[g],
               f"{g}: every upgradable value in the game's files is an upgrade, named and lined up as on the game's screen, with max(5, steps) stars and its own place in a save {wrong[:3]}")
+        # An upgrade with fewer than 5 steps carries them as a third element ([stat, max, steps]); every other has two.
+        def extra(w, k):
+            st = steps_of[g].get(w, {}).get(slot_of[g][w][k])
+            return None if st is None else ([st] if st < 5 else [])
+        off = [w for w, ups in raw_ups.items() for k, u in enumerate(ups) if u[2:] != extra(w, k)]
+        n_third = sum(len(u) == 3 for ups in raw_ups.values() for u in ups)
+        check(not off and n_third == {"edf5": 269, "edf6": 334}[g], f"{g}: each of the {n_third} upgrades with fewer than 5 steps carries its steps from tools/game-stars, and no other upgrade has a third element {off[:3]}")
 
     async def maxed_is(g, slot, n):
         """True once the profile's summary says n weapons are fully upgraded (the recount runs after the import)."""
@@ -1187,12 +1437,26 @@ async def run(browser) -> None:
             await choose(str(p_bad))
             refused[what] = expect in await ps.locator("#saveResult").inner_text() and await ps.locator("#saveResult button").count() == 0
         check(all(refused.values()) and await ps.evaluate(ALL) == before, f"{g}: files that are not a readable save are refused and nothing changes {refused}")
+    # A save marks the placeholders' rows as owned (the game starts with them). Those rows are not weapons: not counted, not imported.
+    for g in ("edf5", "edf6"):
+        rows = maps[g]
+        conds = {0: 1}
+        conds.update({r: 1 for r in PLACEHOLDER_ROWS[g]})
+        path_ph = await save_file(ps, sdir, g + "-ph", g, save_plaintext(g, conds, stars={r: [5] * 8 for r in PLACEHOLDER_ROWS[g]}))
+        await ps.select_option("#saveGame", g)
+        await ps.select_option("#saveSlot", "con1")
+        buttons = await choose(path_ph)
+        said = " ".join([t.strip() for t in await ps.locator("#saveResult p").all_inner_texts()])
+        await ps.locator("#saveResult button", has_text="Add").click()
+        got = await ps.evaluate(STORED, "edfTracker.p2." + g)  # Console 1 keeps the key of v1.3's "profile 2"
+        check(f"owns 1 of {totals[g]} weapons" in said and buttons == ["Add 1", "Cancel"] and got == {"owned": [rows[0]], "stars": {}},
+              f"{g}: a save that owns the placeholders' rows counts and imports only the real weapon ({said[:40]}, {got})")
     # a save picked while another game is chosen is recognised by its size
     await ps.select_option("#saveGame", "edf41")
     await ps.select_option("#saveSlot", "con4")
     await choose(str(sdir / "edf6" / "MAIN.GST"))
     check(await ps.locator("#saveGame").input_value() == "edf6" and await ps.locator("#saveSlot").input_value() == "con4" and "Game was changed to EDF 6" in await ps.locator("#saveResult").inner_text()
-          and "owns 5 of 1564" in await ps.locator("#saveResult").inner_text(), "a save chosen under the wrong game switches the Game and keeps the chosen profile")
+          and "owns 5 of 1560" in await ps.locator("#saveResult").inner_text(), "a save chosen under the wrong game switches the Game and keeps the chosen profile")
     # changing the profile while a preview is showing clears it, so its buttons cannot act on another profile
     await ps.select_option("#saveSlot", "pc3")
     check(not await ps.locator("#saveResult").is_visible(), "changing the profile clears a preview that was for another profile")
@@ -1223,7 +1487,7 @@ async def run(browser) -> None:
         await ps2.set_input_files("#saveFile", str(sdir / "edf5" / "MAIN.GST"))
         await ps2.wait_for_function(RESULT)
         said.append((await ps2.locator("#saveResult p").first.inner_text()).strip())
-    check(all("weapon list for reading saves did not load" in s for s in said[:2]) and "owns 5 of 1187" in said[2], f"a weapon list that cannot be fetched gives a plain message, and trying again works {[s[:34] for s in said]}")
+    check(all("weapon list for reading saves did not load" in s for s in said[:2]) and "owns 5 of 1183" in said[2], f"a weapon list that cannot be fetched gives a plain message, and trying again works {[s[:34] for s in said]}")
     await cs2.close()
     cs3 = await browser.new_context(viewport=PHONE)
     ps3 = await cs3.new_page()
@@ -1241,6 +1505,48 @@ async def run(browser) -> None:
     old_map = await ps3.evaluate(STORED, "edfTracker.edf5")  # PC 1, the profile in use, keeps the plain key
     check("Star levels could not be read this time" in told and len(old_map["owned"]) == 5 and old_map["stars"] == {}, "with a weapon list from before star levels were added, the weapons still import and the player is told the stars were not read")
     await cs3.close()
+    # A weapon list for reading saves from before v1.10.0 (a copy cached during an update) still names the placeholders: they are still left out
+    old_rows = {g: [PLACEHOLDER_ROWS[g].get(i, w) for i, w in enumerate(maps[g])] for g in ("edf5", "edf6")}
+    cs4 = await browser.new_context(viewport=PHONE)
+    ps4 = await cs4.new_page()
+    await watch(ps4, errors, external)
+    await ps4.add_init_script("window.__rows = %s; const realFetch = window.fetch.bind(window);" % json.dumps(old_rows["edf6"]) +
+        """window.fetch = (url, opts) => (String(url).indexOf('edf6-save.json') === -1 ? realFetch(url, opts)
+            : realFetch(url, opts).then((r) => r.json()).then((m) => new Response(JSON.stringify({ game: m.game, rows: window.__rows, stars: m.stars }))));""")
+    await ps4.goto(BASE + "index.html")
+    await ps4.locator("#saveOpen").click()
+    await ps4.wait_for_selector("#saveIn:not([hidden])")
+    await ps4.select_option("#saveGame", "edf6")
+    await ps4.set_input_files("#saveFile", str(sdir / "edf6-ph" / "MAIN.GST"))
+    await ps4.wait_for_function(RESULT)
+    said = await ps4.locator("#saveResult").inner_text()
+    await ps4.locator("#saveResult button", has_text="Add").click()
+    got = await ps4.evaluate(STORED, "edfTracker.edf6")
+    check(f"owns 1 of {totals['edf6']} weapons" in said and "Add 1" in said and got["owned"] == [maps["edf6"][0]],
+          f"with a weapon list for saves from before v1.10.0 the placeholders are still not counted or imported ({said[:40]!r}, {got['owned']})")
+    # Progress saved before v1.10.0 can hold a placeholder: HQ does not count it, an export leaves it out, and the game page drops it when it saves
+    await ps4.evaluate("localStorage.clear()")
+    await ps4.evaluate("localStorage.setItem('edfTracker.edf6', JSON.stringify({ owned: ['AssultRifle01', 'aSupportNone', 'eVehicleNone', 'hSupportNone1'], stars: { aSupportNone: [1], AssultRifle01: [2] } }))")
+    await ps4.reload()
+    card6 = await ps4.locator('[data-count="edf6"]').inner_text()
+    exported = await ps4.evaluate("import('./js/store.js').then((s) => s.buildExport().games.edf6)")
+    await ps4.goto(BASE + "edf6.html")
+    await ps4.wait_for_selector(".row")
+    await ps4.goto(BASE + "index.html")
+    after_page = await ps4.evaluate(STORED, "edfTracker.edf6")
+    check(f"1/{totals['edf6']}" in card6 and exported["owned"] == ["AssultRifle01"] and exported["stars"] == {"AssultRifle01": [2]}
+          and after_page == {"owned": ["AssultRifle01"], "stars": {"AssultRifle01": [2]}},
+          f"stored progress that holds a placeholder: not counted on HQ ({card6!r}), not exported, and gone once the game page has saved {after_page}")
+    # a backup made before v1.10.0 that holds placeholders imports without them
+    backup = sdir / "old-backup.json"
+    backup.write_text(json.dumps({"app": "edf-unlock-tracker", "version": 1, "games": {"edf5": {"owned": ["AssultRifle01", "hSupportNone0", ""], "stars": {"hSupportNone0": [2]}}}}), encoding="utf-8")
+    ps4.once("dialog", lambda d: asyncio.ensure_future(d.accept()))
+    await ps4.set_input_files("#importfile", str(backup))
+    await ps4.wait_for_function("/Imported/.test(document.querySelector('#notice').textContent)")
+    got = await ps4.evaluate(STORED, "edfTracker.edf5")
+    card5b = await ps4.locator('[data-count="edf5"]').inner_text()
+    check(got == {"owned": ["AssultRifle01"], "stars": {}} and f"1/{totals['edf5']}" in card5b, f"a backup from before v1.10.0 imports without the placeholders (or an empty id) {got}")
+    await cs4.close()
 
     # ---- a page that cannot fit one screen scrolls instead of clipping the details header (very narrow phones, wide fonts)
     for (w, h), type_prefs, expect in (((280, 653), {}, True), ((402, 874), {}, False), ((320, 568), {"edf5": {"font": "orbitron", "bold": True, "caps": True}}, None)):

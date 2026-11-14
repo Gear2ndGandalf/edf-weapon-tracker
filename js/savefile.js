@@ -30,7 +30,9 @@
 //   • An entry's position is the weapon's place in the game's own weapon table.
 //     data/<game>-save.json lists the tracker's weapon id for each position ("rows")
 //     and, for EDF 5 and 6, where each of the weapon's upgrades keeps its star level
-//     among the entry's eight star bytes ("stars", see starsOf below).
+//     among the entry's eight star bytes ("stars", see starsOf below). A row whose id
+//     is "" is not a weapon (the "nothing equipped" placeholders of EDF 5 and 6, left
+//     out of the tracker since v1.10.0); it is never read.
 // ============================================================================
 
 const hex = (s) => new Uint8Array(s.match(/../g).map((b) => parseInt(b, 16)));
@@ -134,13 +136,14 @@ function starsOf(plain, at, where) {
   return { now, most };
 }
 
-// Reads one save. `data` is the file's contents (ArrayBuffer).
+// Reads one save. `data` is the file's contents (ArrayBuffer). `skip` (optional) lists ids that are not
+// weapons (store.js REMOVED), in case the weapon list fetched is a copy from before they were taken out.
 // Returns { owned: [tracker id, ...], total: how many weapons the tracker lists for this game,
 //           stars: { id: [stars per upgrade, in the tracker's order] } for the owned weapons, or null
 //           when the game has no stars or their places in the save are not known,
 //           most:  { id: [the most stars each of those upgrades can have] } (null with stars) }.
 // Throws an Error with a message for the player when the file is not a save this can read.
-export async function readSave(game, data) {
+export async function readSave(game, data, skip) {
   const fmt = SAVES[game];
   if (!fmt) throw fail('Saves of this game cannot be read yet.');
   const name = fmt.file;
@@ -170,9 +173,10 @@ export async function readSave(game, data) {
   const owned = [];
   const stars = places ? {} : null;
   const most = places ? {} : null;
+  const isWeapon = (id) => typeof id === 'string' && id !== '' && !(Array.isArray(skip) && skip.indexOf(id) !== -1);
   for (let i = 0; i < fmt.rows && i < ids.length; i++) {
     const at = fmt.table + i * fmt.rowSize;
-    if (typeof ids[i] !== 'string' || !(view.getUint32(at, true) & 1)) continue;
+    if (!isWeapon(ids[i]) || !(view.getUint32(at, true) & 1)) continue;
     owned.push(ids[i]);
     if (places && typeof places[i] === 'string' && places[i]) {
       const s = starsOf(plain, at, places[i]);
@@ -182,5 +186,5 @@ export async function readSave(game, data) {
       }
     }
   }
-  return { owned, total: ids.filter((id) => typeof id === 'string').length, stars, most };
+  return { owned, total: ids.filter(isWeapon).length, stars, most };
 }

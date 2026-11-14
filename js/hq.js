@@ -14,9 +14,14 @@ function showProgress() {
     const pct = s.total ? Math.round((s.owned / s.total) * 100) : 0;
     const count = document.querySelector('[data-count="' + g + '"]');
     const bar = document.querySelector('[data-bar="' + g + '"]');
-    if (count) {
-      count.innerHTML = CHECK + '<span class="sr-only">Owned </span>' + s.owned + '/' + s.total +
-        (g === 'edf41' ? '' : ' · ' + STAR + '<span class="sr-only">Fully upgraded </span>' + s.maxed);
+    // Fully upgraded is counted out of the items that have upgrades (about 120 per game have none).
+    // (store.js from before v1.10.0 has no UPGRADABLE; a phone can briefly pair it with this script.)
+    const most = store.UPGRADABLE ? store.UPGRADABLE[g] : 0;
+    if (count) { // two parts that each stay whole; on a narrow card the second goes under the first
+      count.innerHTML = '<span class="card__part">' + CHECK + '<span class="sr-only">Owned </span>' + s.owned + '/' + s.total + '</span>' +
+        (g === 'edf41' ? '' : '<span class="card__part">' + STAR + (most
+          ? '<span class="sr-only">Fully upgraded ' + s.maxed + ' of ' + most + '</span><span aria-hidden="true">' + s.maxed + '/' + most + '</span>'
+          : '<span class="sr-only">Fully upgraded </span>' + s.maxed) + '</span>');
     }
     if (bar) bar.style.width = pct + '%';
   }
@@ -395,7 +400,7 @@ async function previewSave(file) {
     } catch (e) { // moved, deleted or locked since it was chosen
       throw Object.assign(new Error('The file could not be opened. It may have been moved or be in use; choose it again.'), { readable: true });
     }
-    const found = await lib.readSave(game, data);
+    const found = await lib.readSave(game, data, store.REMOVED ? store.REMOVED[game] : null); // not weapons, even in an older weapon list
     if (turn !== saveTurn) return; // the game, profile or file was changed while this one was being read
     const withStars = !!(found.stars && $('#saveStars') && $('#saveStars').checked);
     const p = store.loadProgress(game, slot);

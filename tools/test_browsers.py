@@ -159,7 +159,7 @@ def run(drv, name: str) -> None:
     # ---- settings carry across pages; profiles keep progress apart
     drv.get(BASE + "index.html")
     wait_for(drv, ".card")
-    check("2/1564" in one(drv, '[data-count="edf6"]').text, "HQ shows the saved progress")
+    check("2/1560" in one(drv, '[data-count="edf6"]').text, "HQ shows the saved progress")
     # the text-size slider: set it the way a drag does (value, then an "input" event)
     js(drv, "const r = document.querySelector('#textRange'); r.value = '130'; r.dispatchEvent(new Event('input', { bubbles: true }));")
     js(drv, "arguments[0].scrollIntoView({block: 'center'})", one(drv, '#segFx button[data-fx="off"]'))
@@ -168,7 +168,7 @@ def run(drv, name: str) -> None:
     one(drv, '#segGame button[data-game="edf6"]').click()
     js(drv, "arguments[0].scrollIntoView({block: 'center'})", one(drv, '#segProfile .slot[data-slot="con1"]'))
     one(drv, '#segProfile .slot[data-slot="con1"]').click()
-    check("0/1564" in one(drv, '[data-count="edf6"]').text, "the Console 1 profile starts empty")
+    check("0/1560" in one(drv, '[data-count="edf6"]').text, "the Console 1 profile starts empty")
     drv.get(BASE + "edf6.html")
     wait_for(drv, ".row")
     state = js(drv, """return { ts: getComputedStyle(document.documentElement).getPropertyValue('--ts').trim(),
@@ -185,7 +185,7 @@ def run(drv, name: str) -> None:
     for sel in ['#segText button[data-text="auto"]', '#segFx button[data-fx="on"]', '#segGame button[data-game="edf6"]', '#segProfile .slot[data-slot="pc1"]']:
         js(drv, "arguments[0].scrollIntoView({block: 'center'})", one(drv, sel))
         one(drv, sel).click()
-    check("2/1564" in one(drv, '[data-count="edf6"]').text, "switching back to PC 1 restores its progress")
+    check("2/1560" in one(drv, '[data-count="edf6"]').text, "switching back to PC 1 restores its progress")
 
     # ---- layout at phone and desktop widths
     for w, h in [(430, 900), (1280, 800)]:
